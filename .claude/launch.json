@@ -1,0 +1,42 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "D:/StartUp/MedMapp/Claude NEW/22.11 NEW/backend/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "D:/StartUp/MedMapp/Claude NEW/22.11 NEW/backend/manage.py",
+        "runserver",
+        "127.0.0.1:8000",
+        "--noreload"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "D:/StartUp/MedMapp/Claude NEW/22.11 NEW/web",
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "web-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "D:/StartUp/MedMapp/Claude NEW/22.11 NEW/web/node_modules/next/dist/bin/next",
+        "dev",
+        "D:/StartUp/MedMapp/Claude NEW/22.11 NEW/web",
+        "-p",
+        "3001"
+      ],
+      "port": 3001,
+      "env": {
+        "NEXT_DIST_DIR": ".next-dev"
+      }
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+# MedMapp 2.0 — production stack: PostgreSQL + Django (Gunicorn) + Next.js + Nginx (TLS)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-medmapp}
+      POSTGRES_USER: ${DB_USER:-medmapp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-medmapp}"]
+      interval: 10s
+      retries: 5
+
+  redis:   # shared cache: rate limits and the public API cache for all gunicorn workers
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes:
+      - media:/data/media
+      - private_media:/data/private_media
+      - static:/app/staticfiles
+
+  scheduler:   # task & follow-up reminders every 5 minutes
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    depends_on: [backend]
+    command: ["sh", "-c", "while true; do python manage.py send_reminders; sleep 300; done"]
+
+  web:
+    build:
+      context: ./web
+      args:
+        BACKEND_URL: http://backend:8000
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://medmapp.uz}
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on: [backend]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+      - media:/srv/media:ro
+      - static:/srv/static:ro
+    depends_on: [web, backend]
+
+volumes:
+  pgdata:
+  media:
+  private_media:   # never mounted into nginx: medical files are only reachable via signed API downloads
+  static:

@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+/* Flag emoji font (Twemoji graphics, CC-BY 4.0) - Windows has no colour flag glyphs and shows "CN", "TR" letters.
+   unicode-range limits it to regional-indicator pairs, so normal text keeps Inter/Manrope. */
+@font-face {
+  font-family: "Twemoji Country Flags";
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  src: url("/fonts/TwemojiCountryFlags.woff2") format("woff2");
+  font-display: swap;
+}
+
+/* ============================================================
+   MedMapp design tokens
+   Navy = trust, Blue (teal-* tokens) = logo blue, Green = logo accent
+   ============================================================ */
+@theme {
+  --color-navy-950: #071a33;
+  --color-navy-900: #0b2545;
+  --color-navy-800: #0f3460;
+  --color-navy-700: #164a85;
+  --color-navy-600: #2563a8;
+  --color-ink: #243b53;
+  --color-ink-soft: #486581;
+  --color-ink-muted: #7b8da1;
+  --color-teal-50: #eaf3fe;
+  --color-teal-100: #cfe4fc;
+  --color-teal-300: #6fb1f5;
+  --color-teal-400: #3b95ef;
+  --color-teal-500: #0d7be8;
+  --color-teal-600: #0a66c4;
+  --color-teal-700: #08519c;
+  --color-brand-500: #0d7be8;
+  --color-brand-600: #0b6fd8;
+  --color-green-50: #e7f8ef;
+  --color-green-100: #c6eed8;
+  --color-green-300: #5fd696;
+  --color-green-400: #2fc67a;
+  --color-green-500: #0fb861;
+  --color-green-600: #0c9a51;
+  --color-green-700: #0a7a41;
+  --color-sand-100: #fdf3e4;
+  --color-sand-400: #f2b766;
+  --color-sand-500: #e89a3c;
+  --color-mist: #f5f9fc;
+  --color-line: #dfe8f0;
+  --color-line-strong: #c8d6e3;
+  --color-danger: #d64545;
+  --color-danger-soft: #fdecec;
+  --color-success: #1f9d6b;
+  --color-success-soft: #e6f6ef;
+  --color-warning: #c77d12;
+  --color-warning-soft: #fdf3e1;
+
+  --font-sans: "Twemoji Country Flags", var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Twemoji Country Flags", var(--font-manrope), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+
+  --shadow-card: 0 1px 2px rgb(11 37 69 / 0.04), 0 4px 16px -4px rgb(11 37 69 / 0.08);
+  --shadow-lift: 0 2px 4px rgb(11 37 69 / 0.05), 0 18px 40px -12px rgb(11 37 69 / 0.22);
+  --shadow-glow: 0 0 0 1px rgb(13 123 232 / 0.25), 0 12px 32px -8px rgb(13 123 232 / 0.35);
+
+  --animate-dash: dash 3.5s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+
+  @keyframes dash {
+    to { stroke-dashoffset: -40; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(0.6); opacity: 0.8; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    @apply bg-mist text-ink antialiased font-sans;
+    font-feature-settings: "cv11", "ss01";
+  }
+  h1, h2, h3, h4 { @apply font-display text-navy-900 tracking-tight; }
+  ::selection { background: var(--color-teal-100); color: var(--color-navy-900); }
+  :focus-visible { outline: 2px solid var(--color-teal-500); outline-offset: 2px; border-radius: 6px; }
+  input, select, textarea, button { font: inherit; }
+  /* Tailwind v4 resets buttons to the default cursor: show a hand on everything clickable. */
+  button:not(:disabled), [role="button"], [role="option"], [role="tab"], a[href], summary, label[for], select:not(:disabled),
+  input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled), input[type="file"]:not(:disabled), input[type="submit"], input[type="button"] {
+    cursor: pointer;
+  }
+  button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+}
+
+@layer components {
+  .container-x { @apply mx-auto w-full max-w-[88rem] px-4 sm:px-6 lg:px-10; }
+  .card { @apply rounded-2xl border border-line bg-white shadow-card; }
+  .card-hover { @apply transition duration-300 hover:-translate-y-0.5 hover:shadow-lift hover:border-line-strong; }
+  .eyebrow { @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-teal-600; }
+  .eyebrow::before { content: ""; @apply size-1.5 rounded-full bg-green-500; }
+  .h-section { @apply text-3xl font-extrabold leading-tight sm:text-4xl; }
+  .lead { @apply text-base leading-relaxed text-ink-soft sm:text-lg; }
+  .chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-xs font-medium text-ink-soft; }
+  .prose-mm { @apply text-ink leading-relaxed; }
+  .prose-mm p { @apply mb-4; }
+  .prose-mm h2 { @apply mt-8 mb-3 text-2xl font-bold; }
+  .prose-mm h3 { @apply mt-6 mb-2 text-xl font-bold; }
+  .prose-mm ul { @apply mb-4 list-disc pl-6; }
+  .prose-mm ol { @apply mb-4 list-decimal pl-6; }
+  .prose-mm a { @apply text-teal-700 underline underline-offset-2; }
+  .prose-mm img { @apply my-4 rounded-xl; }
+  /* long-form articles: larger type, generous line height, clear section headings */
+  .prose-article { @apply text-[17px] leading-[1.85] text-ink sm:text-lg; }
+  .prose-article > p:first-child { @apply text-lg leading-relaxed text-navy-900 sm:text-xl; }
+  .prose-article p { @apply mb-5; }
+  .prose-article h2 { @apply mb-4 mt-12 scroll-mt-28 border-l-4 border-teal-500 pl-4 text-[1.6rem] font-extrabold leading-snug text-navy-900; }
+  .prose-article h2:first-child { @apply mt-0; }
+  .prose-article h3 { @apply mt-8 mb-3 text-xl font-bold text-navy-900; }
+  .prose-article ul { @apply mb-6 list-none space-y-2.5 pl-0; }
+  .prose-article ul li { @apply relative rounded-xl bg-mist py-3 pl-11 pr-4; }
+  .prose-article ul li::before { content: ""; @apply absolute left-4 top-[1.35rem] size-2.5 rounded-full bg-teal-500 ring-4 ring-teal-100; }
+  .prose-article em { @apply text-ink-muted; }
+  .prose-article strong { @apply font-bold text-navy-900; }
+
+  /* signature gradient surfaces */
+  .bg-hero {
+    background:
+      radial-gradient(60rem 40rem at 85% -10%, rgb(13 123 232 / 0.28), transparent 60%),
+      radial-gradient(40rem 30rem at -10% 110%, rgb(15 184 97 / 0.18), transparent 60%),
+      linear-gradient(160deg, #071a33 0%, #0b2545 45%, #0f3a6e 100%);
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+  .bg-soft {
+    background:
+      radial-gradient(50rem 24rem at 100% 0%, rgb(13 123 232 / 0.08), transparent 60%),
+      var(--color-mist);
+  }
+  .route-line { stroke-dasharray: 4 6; animation: var(--animate-dash); }
+  .mm-fade { animation: dash 3.5s linear infinite, mm-fade-in 0.9s ease-out both; }
+  .mm-pop { animation: mm-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  @keyframes mm-fade-in { from { opacity: 0; } to { opacity: 0.9; } }
+  @keyframes mm-pop-in { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--color-line-strong) transparent; }
+}
+
+@supports (animation-timeline: view()) {
+  .mm-reveal { animation: mm-rise linear both; animation-timeline: view(); animation-range: entry 0% entry 60%; }
+  @keyframes mm-rise { from { transform: translateY(14px); } to { transform: none; } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+}

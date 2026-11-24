@@ -1,0 +1,2 @@
+# See the .gitignore in the project root; backend-specific extras only.
+*.sqlite3

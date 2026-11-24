@@ -1,0 +1,24 @@
+# Tooling config for the Django backend. Run from backend/:  ruff check .   (see CONTRIBUTING.md)
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+extend-exclude = ["*/migrations/*", ".venv", "media", "private_media", "static", "staticfiles"]
+
+[tool.ruff.lint]
+# pyflakes + pycodestyle errors + import order + bugbear + Django-specific checks
+select = ["F", "E", "W", "I", "B", "DJ", "UP"]
+ignore = [
+    "E501",    # long lines: data files and translations
+    "B904",    # raise ... from err inside except: not required for API errors
+    "DJ001",   # null=True on CharField: used deliberately by modeltranslation fields
+    "UP031",   # %-format in a few legacy strings
+    "DJ008",   # __str__ on every model: nice to have, not enforced
+]
+
+[tool.ruff.lint.per-file-ignores]
+"*/management/commands/_*.py" = ["E", "W"]   # large seed data files
+"tests/*" = ["B", "E741"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["accounts", "analytics", "assistant", "audit", "blog", "cases", "catalog", "clinics", "cms", "config",
+                     "core", "crm", "doctors", "finance", "notifications", "services", "tools"]

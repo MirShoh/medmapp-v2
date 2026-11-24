@@ -1,0 +1,47 @@
+# ---- Secrets and personal data: never commit ----
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.demo-credentials
+# patients' medical files
+backend/private_media/
+# uploaded images (seed images live in */seed_media/)
+backend/media/
+backend/db.sqlite3
+backend/db.sqlite3-journal
+# database copies and old code
+backups/
+deploy/certs/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+backend/staticfiles/
+
+# ---- Node / Next.js ----
+web/node_modules/
+web/.next/
+web/.next-dev/
+web/out/
+web/tsconfig.tsbuildinfo
+web/next-env.d.ts
+npm-debug.log*
+
+# ---- Local tooling and reference material ----
+# old projects kept for reference only
+_src/
+tools/*.exe
+.claude/settings.local.json
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
