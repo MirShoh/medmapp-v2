@@ -1,6 +1,8 @@
 import "server-only";
 
-const BACKEND = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+// Django API address. On a host without a local backend (e.g. Netlify before BACKEND_URL is set) there is no
+// fallback: pages render without catalogue data instead of waiting on retries for an address that cannot answer.
+export const BACKEND = process.env.BACKEND_URL || (process.env.NETLIFY || process.env.VERCEL ? "" : "http://127.0.0.1:8000");
 
 /**
  * Server-side fetch for public pages (SEO). Returns null when the backend answers 404 or stays unreachable.
@@ -8,6 +10,7 @@ const BACKEND = process.env.BACKEND_URL || "http://127.0.0.1:8000";
  * without this a page could be cached with empty sections.
  */
 export async function serverGet<T>(path: string, locale: string, revalidate = 60): Promise<T | null> {
+  if (!BACKEND) return null;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const res = await fetch(`${BACKEND}/api/v2${path}`, {

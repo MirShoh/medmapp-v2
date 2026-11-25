@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { routing } from "@/i18n/routing";
 import { absUrl, languageAlternates } from "@/lib/seo";
 
-const BACKEND = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+import { BACKEND } from "@/lib/server";
 export const revalidate = 3600;
 
 type Row = { slug: string; updated: string | null };
@@ -22,6 +22,7 @@ const DYNAMIC: [keyof Data, string, number][] = [
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let data: Partial<Data> = {};
   try {
+    if (!BACKEND) throw new Error("no backend");
     const r = await fetch(`${BACKEND}/api/v2/public/sitemap/`, { next: { revalidate } });
     if (r.ok) data = await r.json();
   } catch { /* backend down: static pages only */ }

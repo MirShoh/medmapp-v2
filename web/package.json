@@ -42,5 +42,8 @@
   "overrides": {
     "motion-dom": "12.23.21",
     "motion-utils": "12.23.6"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
