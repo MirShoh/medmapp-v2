@@ -983,6 +983,15 @@ class ImageOptimisationTests(Base):
         name = self.h1.image.name
         self.h1.save()
         self.assertEqual(self.h1.image.name, name)
+        # a card-size copy is written next to it and served in lists
+        from config.images import thumb_name
+
+        thumb = thumb_name(name)
+        self.assertTrue(self.h1.image.storage.exists(thumb))
+        with Image.open(self.h1.image.storage.path(thumb)) as im:
+            self.assertEqual(max(im.size), 640)
+        card = APIClient().get("/api/v2/public/hospitals/").data["results"]
+        self.assertTrue(next(h for h in card if h["slug"] == "alpha-heart")["image_thumb"].endswith(".thumb.webp"))
 
 
 class SearchTests(Base):
@@ -1074,3 +1083,27 @@ class WalkInPatientTests(Base):
         p = Patient.objects.create(full_name="X", phone="+998901112233")
         viewer = self.client_for(self.user("finance_manager", email="fm2@t.local"))
         self.assertIn(viewer.post(f"/api/v2/admin/patients/{p.pk}/open_cabinet/", {"consent": True}, format="json").status_code, (403, 404))
+
+
+class InternalTokenThrottleTests(Base):
+    @override_settings(INTERNAL_API_TOKEN="t" * 40)
+    def test_site_server_is_not_rate_limited_but_others_are(self):
+        from django.core.cache import cache
+        from rest_framework.request import Request
+        from rest_framework.test import APIRequestFactory
+
+        from config.throttling import SiteAnonThrottle
+
+        class Tight(SiteAnonThrottle):
+            rate = "3/min"
+
+        def allowed(**headers):
+            cache.clear()
+            req = Request(APIRequestFactory().get("/api/v2/public/sitemap/", **headers))
+            return [Tight().allow_request(req, None) for _ in range(5)]
+
+        self.assertIn(False, allowed())  # an ordinary visitor is limited
+        self.assertEqual(set(allowed(HTTP_X_INTERNAL_TOKEN="t" * 40)), {True})  # the site's own server is not
+        self.assertIn(False, allowed(HTTP_X_INTERNAL_TOKEN="wrong"))  # a guessed token does not help
+        with self.settings(INTERNAL_API_TOKEN=""):
+            self.assertIn(False, allowed(HTTP_X_INTERNAL_TOKEN=""))  # no token configured: nothing is exempt

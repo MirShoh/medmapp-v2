@@ -11,7 +11,7 @@ import { Block, KeyFacts, PriceTable } from "@/components/site/detail";
 import { Faq, Prose } from "@/components/site/section";
 import { Link } from "@/i18n/navigation";
 import { cardLabels } from "@/lib/labels";
-import { serverGet } from "@/lib/server";
+import { serverGet, staticSlugs } from "@/lib/server";
 import type { Country, DoctorCard as TD, FAQ, HospitalCard as TH, PackageCard as TP, Price, Treatment } from "@/lib/types";
 import { money } from "@/lib/utils";
 
@@ -94,4 +94,13 @@ export default async function TreatmentPage({ params }: P) {
       <CompareBar kind="hospitals" />
     </>
   );
+}
+
+// Rendered on the first request, then served from the cache and refreshed in the background every 60 s (ISR).
+// Without this, every visit re-rendered the page on the server.
+export const revalidate = 60;
+// Locale comes from the URL, never from cookies/headers, so the page can always be rendered statically.
+export const dynamic = "force-static";
+export async function generateStaticParams() {
+  return staticSlugs("treatments");
 }

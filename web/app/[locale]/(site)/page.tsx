@@ -271,7 +271,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             <div className="grid gap-5 md:grid-cols-3">
               {data!.posts.map((p) => (
                 <Link key={p.id} href={`/blog/${p.slug}`} className="card card-hover group overflow-hidden">
-                  <PostCover image={p.image} category={p.category} seed={p.id} />
+                  <PostCover image={p.image_thumb || p.image} category={p.category} seed={p.id} />
                   <div className="p-5">
                     <div className="text-xs text-ink-muted">{p.category} · {date(p.published_date, locale)}</div>
                     <h3 className="mt-2 font-display text-lg font-bold leading-snug group-hover:text-teal-700">{p.title}</h3>

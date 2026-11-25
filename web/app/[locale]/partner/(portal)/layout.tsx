@@ -1,18 +1,14 @@
-"use client";
-
-import { Bell, Building2, Inbox, LayoutDashboard } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import type { ReactNode } from "react";
-import { PortalShell } from "@/components/portal/shell";
+import PartnerShell from "./portal-shell";
 
-export default function PartnerLayout({ children }: { children: ReactNode }) {
-  const t = useTranslations();
+/** Portal pages get every message namespace (the public site only gets the public ones; see i18n/client-messages). */
+export default async function PartnerLayout({ children }: { children: ReactNode }) {
+  const [locale, messages] = await Promise.all([getLocale(), getMessages()]);
   return (
-    <PortalShell portal="partner" title={t("auth.partnerLogin")} groups={[{ items: [
-      { href: "/partner", label: t("partner.home"), icon: LayoutDashboard, exact: true },
-      { href: "/partner/referrals", label: t("partner.referrals"), icon: Inbox, counter: "referrals" },
-      { href: "/partner/profile", label: t("partner.profile"), icon: Building2 },
-      { href: "/partner/notifications", label: t("dash.notifications"), icon: Bell, counter: "notifications" },
-    ] }]}>{children}</PortalShell>
+    <NextIntlClientProvider locale={locale} messages={messages}>
+      <PartnerShell>{children}</PartnerShell>
+    </NextIntlClientProvider>
   );
 }

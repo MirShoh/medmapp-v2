@@ -89,7 +89,7 @@ export function TreatmentExplorer({ specialties, treatments, locale, labels, pag
                 className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-white p-5 transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-lift">
                 {x.image && (
                   <div className="-mx-5 -mt-5 mb-4 aspect-[16/9] overflow-hidden bg-navy-800">
-                    <img src={mediaUrl(x.image)!} alt={x.name} className="size-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
+                    <img src={mediaUrl(x.image_thumb || x.image)!} alt={x.name} className="size-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
                   </div>
                 )}
                 <div className="flex items-start gap-3">

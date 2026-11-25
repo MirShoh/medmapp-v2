@@ -9,7 +9,7 @@ import { Prose } from "@/components/site/section";
 import { Link } from "@/i18n/navigation";
 import { mediaUrl } from "@/lib/media";
 import { SITE_URL, absUrl, breadcrumbLd, clip, seo } from "@/lib/seo";
-import { serverGet } from "@/lib/server";
+import { serverGet, staticSlugs } from "@/lib/server";
 import type { Post } from "@/lib/types";
 import { date } from "@/lib/utils";
 
@@ -115,7 +115,7 @@ export default async function PostPage({ params }: P) {
             <div className="grid gap-5 md:grid-cols-3">
               {more.map((x) => (
                 <Link key={x.id} href={`/blog/${x.slug}`} className="card card-hover group overflow-hidden">
-                  <PostCover image={x.image} category={x.category} seed={x.id} />
+                  <PostCover image={x.image_thumb || x.image} category={x.category} seed={x.id} />
                   <div className="p-5">
                     <div className="text-xs text-ink-muted">{date(x.published_date, locale)}</div>
                     <h3 className="mt-2 font-display text-lg font-bold leading-snug group-hover:text-teal-700">{x.title}</h3>
@@ -128,4 +128,13 @@ export default async function PostPage({ params }: P) {
       )}
     </>
   );
+}
+
+// Rendered on the first request, then served from the cache and refreshed in the background every 60 s (ISR).
+// Without this, every visit re-rendered the page on the server.
+export const revalidate = 60;
+// Locale comes from the URL, never from cookies/headers, so the page can always be rendered statically.
+export const dynamic = "force-static";
+export async function generateStaticParams() {
+  return staticSlugs("posts");
 }

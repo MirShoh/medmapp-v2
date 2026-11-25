@@ -19,6 +19,19 @@ def csv(text):
     return [x.strip() for x in (text or "").split(",") if x.strip()]
 
 
+class ThumbField(serializers.SerializerMethodField):
+    """URL of the card-size copy of an image field (config/images.py), falling back to the image itself."""
+
+    def __init__(self, source_field, **kwargs):
+        self.source_field = source_field
+        super().__init__(**kwargs)
+
+    def to_representation(self, obj):
+        from config.images import thumb_url
+
+        return thumb_url(getattr(obj, self.source_field))
+
+
 def plain(html, limit):
     """Strip tags and clip to `limit` characters on a word boundary."""
     text = " ".join(strip_tags(html or "").split())
@@ -63,10 +76,11 @@ class AccreditationSerializer(serializers.ModelSerializer):
 
 class TreatmentMini(serializers.ModelSerializer):
     specialty = SpecialtyMini(read_only=True)
+    image_thumb = ThumbField("image")
 
     class Meta:
         model = Treatment
-        fields = ("id", "name", "slug", "short_description", "is_advanced", "specialty", "image")
+        fields = ("id", "name", "slug", "short_description", "is_advanced", "specialty", "image", "image_thumb")
 
 
 class TreatmentPriceSerializer(serializers.ModelSerializer):
@@ -103,12 +117,13 @@ class HospitalCard(serializers.ModelSerializer):
     rating = serializers.FloatField(read_only=True, default=None)
     reviews_count = serializers.IntegerField(read_only=True, default=0)
     doctors_count = serializers.IntegerField(read_only=True, default=0)
+    image_thumb = ThumbField("image")
 
     class Meta:
         model = Hospital
         fields = ("id", "name", "slug", "image", "logo", "short_description", "hospital_type", "city",
                   "specialties", "accreditations", "is_popular", "is_verified", "founded_year", "bed_count",
-                  "min_price_usd", "rating", "reviews_count", "doctors_count", "languages", "image_credit")
+                  "min_price_usd", "rating", "reviews_count", "doctors_count", "languages", "image_credit", "image_thumb")
 
 
 class GallerySerializer(serializers.ModelSerializer):
@@ -275,13 +290,14 @@ class HospitalDetail(SanitizeHTMLMixin, HospitalCard):
 
 
 class CountryCard(serializers.ModelSerializer):
+    hero_image_thumb = ThumbField("hero_image")
     hospitals_count = serializers.IntegerField(read_only=True, default=0)
     doctors_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Country
         fields = ("id", "name", "slug", "flag", "iso_code", "tagline", "hero_image", "hero_image_credit", "hero_image_source", "is_destination",
-                  "hospitals_count", "doctors_count", "languages")
+                  "hospitals_count", "doctors_count", "languages", "hero_image_thumb")
 
 
 class CountryDetail(SanitizeHTMLMixin, CountryCard):
@@ -317,10 +333,11 @@ class TestimonialSerializer(serializers.ModelSerializer):
 class PostCard(serializers.ModelSerializer):
     category = serializers.CharField(source="category.name", default=None)
     category_slug = serializers.CharField(source="category.slug", default=None)
+    image_thumb = ThumbField("image")
 
     class Meta:
         model = Post
-        fields = ("id", "title", "slug", "image", "summary", "category", "category_slug", "published_date")
+        fields = ("id", "title", "slug", "image", "summary", "category", "category_slug", "published_date", "image_thumb")
 
 
 class PostDetail(SanitizeHTMLMixin, PostCard):

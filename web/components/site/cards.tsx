@@ -17,7 +17,7 @@ const TYPE_STYLE: Record<string, { icon: typeof Building2; bg: string }> = {
 };
 
 export function HospitalCard({ h, locale, labels }: { h: THospital } & L) {
-  const img = mediaUrl(h.image);
+  const img = mediaUrl(h.image_thumb || h.image); // card-size copy (~640 px)
   const logo = mediaUrl(h.logo);
   const st = TYPE_STYLE[h.hospital_type] || TYPE_STYLE.private;
   const TypeIcon = st.icon;
@@ -117,7 +117,7 @@ export function DoctorCard({ d, labels }: { d: TDoctor } & L) {
 }
 
 export function TreatmentCard({ t, locale, labels }: { t: Treatment } & L) {
-  const img = mediaUrl(t.image);
+  const img = mediaUrl(t.image_thumb || t.image);
   return (
     <Link href={`/treatments/${t.slug}`} className="card card-hover group flex flex-col overflow-hidden p-5">
       {img && (
@@ -144,7 +144,7 @@ export function TreatmentCard({ t, locale, labels }: { t: Treatment } & L) {
 }
 
 export function CountryCard({ c, labels, className }: { c: TCountry; className?: string } & L) {
-  const img = mediaUrl(c.hero_image);
+  const img = mediaUrl(c.hero_image_thumb || c.hero_image);
   return (
     <Link href={`/destinations/${c.slug}`} className={cn("group relative isolate flex min-h-56 flex-col justify-end overflow-hidden rounded-2xl bg-navy-800 p-5 text-white shadow-card", className)}>
       { }

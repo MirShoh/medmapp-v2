@@ -32,7 +32,7 @@ export default async function BlogPage({ params, searchParams }: P) {
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {data.results.map((p) => (
               <Link key={p.id} href={`/blog/${p.slug}`} className="card card-hover group overflow-hidden">
-                <PostCover image={p.image} category={p.category} seed={p.id} />
+                <PostCover image={p.image_thumb || p.image} category={p.category} seed={p.id} />
                 <div className="p-5">
                   <div className="text-xs text-ink-muted">{[p.category, date(p.published_date, locale)].filter(Boolean).join(" · ")}</div>
                   <h2 className="mt-2 font-display text-lg font-bold leading-snug group-hover:text-teal-700">{p.title}</h2>

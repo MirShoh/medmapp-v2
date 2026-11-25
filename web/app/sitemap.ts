@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { routing } from "@/i18n/routing";
 import { absUrl, languageAlternates } from "@/lib/seo";
 
-import { BACKEND } from "@/lib/server";
+import { BACKEND, INTERNAL_HEADERS } from "@/lib/server";
 export const revalidate = 3600;
 
 type Row = { slug: string; updated: string | null };
@@ -23,7 +23,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let data: Partial<Data> = {};
   try {
     if (!BACKEND) throw new Error("no backend");
-    const r = await fetch(`${BACKEND}/api/v2/public/sitemap/`, { next: { revalidate } });
+    const r = await fetch(`${BACKEND}/api/v2/public/sitemap/`, { headers: INTERNAL_HEADERS, next: { revalidate } });
     if (r.ok) data = await r.json();
   } catch { /* backend down: static pages only */ }
   const entry = (path: string, priority: number, changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"], updated?: string | null) =>

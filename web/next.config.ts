@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Django expects trailing slashes (APPEND_SLASH); do not let Next strip them on proxied /api calls.
   skipTrailingSlashRedirect: true,
+  // ~700 catalogue pages are prebuilt; if the API drops a request mid-build, retry that page instead of failing.
+  experimental: { staticGenerationRetryCount: 3, staticGenerationMaxConcurrency: 4 },
   images: {
     remotePatterns: [
       { protocol: "http", hostname: "127.0.0.1" },

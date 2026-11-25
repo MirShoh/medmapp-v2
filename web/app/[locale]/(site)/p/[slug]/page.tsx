@@ -6,7 +6,7 @@ import { CountryCard } from "@/components/site/cards";
 import { ConsultationForm } from "@/components/site/consultation-form";
 import { PageHero, Prose } from "@/components/site/section";
 import { cardLabels } from "@/lib/labels";
-import { serverGet } from "@/lib/server";
+import { serverGet, staticSlugs } from "@/lib/server";
 import type { CountryCard as TC, Section } from "@/lib/types";
 import { date } from "@/lib/utils";
 
@@ -69,4 +69,13 @@ function LegalBody({ html, contentsLabel }: { html: string; contentsLabel: strin
       <div className={`card p-6 sm:p-10 lg:p-12 ${toc.length > 1 ? "" : "lg:col-span-2"}`}><Prose text={body} /></div>
     </div>
   );
+}
+
+// Rendered on the first request, then served from the cache and refreshed in the background every 60 s (ISR).
+// Without this, every visit re-rendered the page on the server.
+export const revalidate = 60;
+// Locale comes from the URL, never from cookies/headers, so the page can always be rendered statically.
+export const dynamic = "force-static";
+export async function generateStaticParams() {
+  return staticSlugs("pages");
 }

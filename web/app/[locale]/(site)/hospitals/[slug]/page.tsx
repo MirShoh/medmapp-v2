@@ -13,7 +13,7 @@ import { Faq, Prose } from "@/components/site/section";
 import { Link } from "@/i18n/navigation";
 import { cardLabels } from "@/lib/labels";
 import { mediaUrl } from "@/lib/media";
-import { serverGet } from "@/lib/server";
+import { serverGet, staticSlugs } from "@/lib/server";
 import type { DoctorCard as TD, HospitalCard, PackageCard as TP, Price, TreatmentMini } from "@/lib/types";
 import { money } from "@/lib/utils";
 
@@ -396,4 +396,13 @@ export default async function HospitalPage({ params }: P) {
       <div className="h-16 lg:hidden" />
     </>
   );
+}
+
+// Rendered on the first request, then served from the cache and refreshed in the background every 60 s (ISR).
+// Without this, every visit re-rendered the page on the server.
+export const revalidate = 60;
+// Locale comes from the URL, never from cookies/headers, so the page can always be rendered statically.
+export const dynamic = "force-static";
+export async function generateStaticParams() {
+  return staticSlugs("hospitals");
 }

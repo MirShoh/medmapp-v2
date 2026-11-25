@@ -77,10 +77,15 @@ powershell -ExecutionPolicy Bypass -File .\tools-check.ps1   # ruff, migrations,
 3. Start the stack:
 
 ```powershell
-$env:DB_PASSWORD='same-value-as-in-backend/.env'; docker compose up -d --build
+$env:DB_PASSWORD='same-value-as-in-backend/.env'; $env:INTERNAL_API_TOKEN='a-long-random-value'; docker compose up -d --build
 ```
 
-The backend container runs migrations, `collectstatic` and `seed_reference` on every start, then starts Gunicorn. Run `python manage.py import_partners` and `python manage.py import_regional` and `python manage.py seed_content` once after the first deploy (re-running refreshes the partner texts it manages).
+`INTERNAL_API_TOKEN` is a shared secret between the site server and the API (server-side rendering is then not
+rate-limited like one anonymous visitor). Put both variables in a `.env` file next to `docker-compose.yml` so they
+survive restarts. Generate a value with `python -c "import secrets;print(secrets.token_urlsafe(48))"`.
+
+The backend container runs migrations, `collectstatic`, `seed_reference` and `make_thumbnails` on every start, then starts Gunicorn
+(`GUNICORN_WORKERS`, default 3, × `GUNICORN_THREADS`, default 4). Capacity measurements and server sizing: `docs/CAPACITY.md`. Run `python manage.py import_partners` and `python manage.py import_regional` and `python manage.py seed_content` once after the first deploy (re-running refreshes the partner texts it manages).
 
 4. Create the first admin:
 

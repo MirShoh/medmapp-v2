@@ -29,6 +29,7 @@ services:
     environment:
       DB_HOST: db
       REDIS_URL: redis://redis:6379/0
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?set INTERNAL_API_TOKEN (same random value for backend and web)}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -56,6 +57,7 @@ services:
     restart: unless-stopped
     environment:
       BACKEND_URL: http://backend:8000
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?set INTERNAL_API_TOKEN}
     depends_on: [backend]
 
   nginx:

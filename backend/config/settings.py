@@ -166,6 +166,10 @@ SIGNED_URL_TTL_SECONDS = int(os.getenv("SIGNED_URL_TTL_SECONDS", "600"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Shared secret the Next.js server sends with its API calls (header X-Internal-Token) so server-side rendering is not
+# rate-limited like one anonymous visitor (config/throttling.py). Set the same random value for backend and web.
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -185,8 +189,8 @@ REST_FRAMEWORK = {
     # address it adds to X-Forwarded-For, otherwise every visitor would share the proxy's single rate-limit bucket.
     "NUM_PROXIES": int(os.getenv("NUM_PROXIES", "1")),
     "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
+        "config.throttling.SiteAnonThrottle",
+        "config.throttling.SiteUserThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": os.getenv("THROTTLE_ANON", "120/min"),

@@ -321,3 +321,16 @@ Last updated: 2026-11-23 (audit round 2)
   that the patient consented to data processing; a ConsentRecord is stored with the staff member as recorder.
 - Optional "Also open a request" (for staff with medical.edit) creates a treatment case and opens it.
 - Walk-in patients are not leads.
+
+## 2026-11-25 — Load test and performance fixes (details: docs/CAPACITY.md)
+- Detail pages (hospital, treatment, destination, doctor, blog, package, page) are prebuilt from the sitemap
+  (`staticSlugs`, force-static, revalidate 60): ~150 pages/s instead of ~13; 696 pages built in ~100 s.
+- `INTERNAL_API_TOKEN` (header X-Internal-Token, config/throttling.py): the Next.js server is no longer rate-limited
+  as one anonymous visitor (it got HTTP 429 during bulk rebuilds/refreshes).
+- `serverGet` throws on 429/5xx/network errors (only a real 404 returns null), so pages are never cached as "not found".
+- Search: in-memory folded index per worker for catalogue models (live search 161 → 17 ms, list search 267 → 48 ms).
+- Card thumbnails: `x.thumb.webp` (640 px) next to every public image, `*_thumb` API fields, `make_thumbnails`
+  command (also run by the container entrypoint). Hospital list images 1.9 MB → 0.73 MB.
+- Public pages ship only public message namespaces (i18n/client-messages.ts); portal layouts add the full set.
+- Production: gunicorn gthread (workers × threads, max-requests), nginx keep-alive + 60 s page micro-cache with a
+  gzip copy (deploy/nginx.conf), `tools/loadtest.py` for re-measuring on the VPS.

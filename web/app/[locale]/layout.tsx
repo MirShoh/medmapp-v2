@@ -5,6 +5,7 @@ import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
 import type { ReactNode } from "react";
 import { Providers } from "@/components/providers";
+import { publicMessages } from "@/i18n/client-messages";
 import { routing } from "@/i18n/routing";
 import { OG_IMAGE, SITE_URL } from "@/lib/seo";
 import "../globals.css";
@@ -45,7 +46,8 @@ export default async function LocaleLayout({ children, params }: { children: Rea
   const { locale } = await params;
   if (!hasLocale(routing.locales, locale)) notFound();
   setRequestLocale(locale);
-  const messages = await getMessages({ locale });
+  // public namespaces only; portal layouts add the rest (i18n/client-messages.ts)
+  const messages = publicMessages(await getMessages({ locale }));
   return (
     <html lang={locale} className={`${inter.variable} ${manrope.variable}`}>
       <body>

@@ -9,7 +9,7 @@ import { Block, Bullets } from "@/components/site/detail";
 import { Prose } from "@/components/site/section";
 import { Link } from "@/i18n/navigation";
 import { mediaUrl } from "@/lib/media";
-import { serverGet } from "@/lib/server";
+import { serverGet, staticSlugs } from "@/lib/server";
 import type { DoctorCard, TreatmentMini } from "@/lib/types";
 
 type D = DoctorCard & {
@@ -90,4 +90,13 @@ export default async function DoctorPage({ params }: P) {
       </div>
     </>
   );
+}
+
+// Rendered on the first request, then served from the cache and refreshed in the background every 60 s (ISR).
+// Without this, every visit re-rendered the page on the server.
+export const revalidate = 60;
+// Locale comes from the URL, never from cookies/headers, so the page can always be rendered statically.
+export const dynamic = "force-static";
+export async function generateStaticParams() {
+  return staticSlugs("doctors");
 }
