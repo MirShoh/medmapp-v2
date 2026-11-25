@@ -2,7 +2,9 @@ import "server-only";
 
 // Django API address. On a host without a local backend (e.g. Netlify before BACKEND_URL is set) there is no
 // fallback: pages render without catalogue data instead of waiting on retries for an address that cannot answer.
-export const BACKEND = process.env.BACKEND_URL || (process.env.NETLIFY || process.env.VERCEL ? "" : "http://127.0.0.1:8000");
+// SKIP_BUILD_FETCH is set while the Docker image is built (the API container is not running yet); pages are then
+// filled from the API at runtime through ISR (revalidate 60 s).
+export const BACKEND = process.env.SKIP_BUILD_FETCH ? "" : process.env.BACKEND_URL || (process.env.NETLIFY || process.env.VERCEL ? "" : "http://127.0.0.1:8000");
 
 /**
  * Server-side fetch for public pages (SEO). Returns null when the backend answers 404 or stays unreachable.

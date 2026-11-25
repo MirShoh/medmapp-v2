@@ -154,7 +154,7 @@ export function PartnerProfilePage() {
         </div>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display font-bold">{pt("texts")}</h2>
@@ -355,28 +355,71 @@ export function PartnerReferral({ id }: { id: number }) {
   if (q.error || !q.data) return <ErrorBox message={(q.error as Error)?.message || t("common.error")} />;
   const r = q.data;
   const closed = ["accepted", "declined"].includes(r.status);
+  // The partner's work in order; the first unfinished step is "what to do now".
+  const steps: { key: "case" | "opinion" | "quotation" | "accept"; done: boolean }[] = [
+    { key: "case", done: r.status !== "sent" },
+    { key: "opinion", done: r.opinions.length > 0 },
+    { key: "quotation", done: r.quotations.length > 0 },
+    { key: "accept", done: r.status === "accepted" },
+  ];
+  const current = r.status === "declined" ? null : steps.find((x) => !x.done) || null;
+  const goTo = (k: (typeof steps)[number]["key"]) => { if (k !== "accept") setTab(k); };
   return (
     <>
       <div className="card mb-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="font-mono text-xs font-bold text-teal-700">{r.case_reference} · <span className="font-sans">{t.has(`caseType.${r.case_type}`) ? t(`caseType.${r.case_type}`) : r.case_type}</span></div>
-            <h1 className="mt-1 font-display text-2xl font-extrabold">{r.case_title}</h1>
-            <p className="text-sm text-ink-muted">{[r.specialty, date(r.created_at, locale, true)].filter(Boolean).join(" · ")}</p>
+            <Link href="/partner/referrals" className="text-xs font-semibold text-ink-muted hover:text-teal-700">← {t("partner.referrals")}</Link>
+            <div className="mt-1 font-mono text-xs font-bold text-teal-700">{r.case_reference} · <span className="font-sans">{t.has(`caseType.${r.case_type}`) ? t(`caseType.${r.case_type}`) : r.case_type}</span></div>
+            <h1 className="mt-1 font-display text-2xl font-extrabold">{r.specialty || r.case_title}</h1>
+            <p className="text-sm text-ink-muted">{[r.patient.display_name, r.patient.age && `${r.patient.age} ${t("common.years")}`, r.patient.country, date(r.created_at, locale, true)].filter(Boolean).join(" · ")}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={STATUS_TONE[r.status]}>{t(`rs.${r.status}`)}</Badge>
-            {!closed && <>
-              <span className="hidden text-xs text-ink-muted lg:inline">{t("partnerUi.decideHint")}</span>
-              <Button size="sm" onClick={() => post("status", { status: "accepted" })}><CheckCircle2 className="size-4" />{t("partner.accept")}</Button>
-              <Button size="sm" variant="outline" onClick={() => confirm(t("partner.declineCase") + "?") && post("status", { status: "declined" })}><XCircle className="size-4" />{t("partner.declineCase")}</Button>
-            </>}
-          </div>
+          <Badge tone={STATUS_TONE[r.status]}>{t(`rs.${r.status}`)}</Badge>
         </div>
+        <ol className="mt-5 grid gap-2 sm:grid-cols-4">
+          {steps.map((x, i) => {
+            const isNow = current?.key === x.key;
+            return (
+              <li key={x.key}>
+                <button type="button" onClick={() => goTo(x.key)} disabled={x.key === "accept"}
+                  className={cn("flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-default",
+                    x.done ? "border-teal-200 bg-teal-50" : isNow ? "border-amber-300 bg-amber-50" : "border-line bg-white hover:border-line-strong")}>
+                  <span className={cn("grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold",
+                    x.done ? "bg-teal-500 text-white" : isNow ? "bg-amber-500 text-white" : "bg-mist text-ink-muted")}>
+                    {x.done ? <CheckCircle2 className="size-4" /> : i + 1}
+                  </span>
+                  <span className="text-xs font-semibold leading-tight text-navy-900">{t(`partnerUi.step_${x.key}`)}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+        {r.status === "declined" ? (
+          <p className="mt-4 rounded-xl bg-mist px-4 py-3 text-sm text-ink-soft">{t("partnerUi.declinedText")}</p>
+        ) : current ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">{t("partnerUi.nowTitle")}</div>
+              <div className="text-sm font-semibold text-navy-900">{t(`partnerUi.now_${current.key}`)}</div>
+            </div>
+            {current.key === "accept" ? (
+              <>
+                <Button size="sm" onClick={() => post("status", { status: "accepted" })}><CheckCircle2 className="size-4" />{t("partner.accept")}</Button>
+                <Button size="sm" variant="outline" onClick={() => confirm(t("partnerUi.declineConfirm")) && post("status", { status: "declined" })}><XCircle className="size-4" />{t("partner.declineCase")}</Button>
+              </>
+            ) : <Button size="sm" onClick={() => goTo(current.key)}>{t(`partnerUi.go_${current.key}`)} →</Button>}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-xl bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-800">{t("partnerUi.allDone")}</p>
+        )}
+        {!closed && current?.key !== "accept" && (
+          <button type="button" onClick={() => confirm(t("partnerUi.declineConfirm")) && post("status", { status: "declined" })}
+            className="mt-3 text-xs font-semibold text-ink-muted hover:text-danger">{t("partnerUi.cannotTake")}</button>
+        )}
       </div>
       <Tabs className="mb-5" value={tab} onChange={setTab} tabs={[
-        { value: "case", label: t("detail.overview") }, { value: "opinion", label: t("partner.submitOpinion"), count: r.opinions.length },
-        { value: "quotation", label: t("partner.submitQuote"), count: r.quotations.length }, { value: "messages", label: t("partner.messages"), count: r.messages.length },
+        { value: "case", label: `1. ${t("partnerUi.tab_case")}` }, { value: "opinion", label: `2. ${t("partnerUi.tab_opinion")}`, count: r.opinions.length },
+        { value: "quotation", label: `3. ${t("partnerUi.tab_quotation")}`, count: r.quotations.length }, { value: "messages", label: t("partner.messages"), count: r.messages.length },
       ]} />
       {tab === "case" && (
         <div className="grid gap-4 lg:grid-cols-2">

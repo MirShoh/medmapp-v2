@@ -76,7 +76,10 @@ def get_account(user):
 class OtpCode(models.Model):
     """One-time SMS sign-in code (stored as an HMAC, never in clear text)."""
 
+    PURPOSES = [("login", "Sign in"), ("register", "Registration"), ("reset", "Password reset")]
     phone = models.CharField(max_length=16, db_index=True)  # digits only, e.g. 998901234567
+    # a code only works for what it was sent for (a sign-in code cannot reset a password)
+    purpose = models.CharField(max_length=10, choices=PURPOSES, default="login")
     code_hash = models.CharField(max_length=64)
     attempts = models.PositiveSmallIntegerField(default=0)
     ip_address = models.GenericIPAddressField(null=True, blank=True)

@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ImageOff, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageTitle } from "@/components/portal/shell";
@@ -105,7 +106,10 @@ export function ResourceManager({ resource }: { resource: string }) {
   const [search, setSearch] = useState("");
   const [term, setTerm] = useState("");
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const sp = useSearchParams();
+  // e.g. /admin/r/hospitals?has_image=false opens the list already filtered
+  const [filters, setFilters] = useState<Record<string, string>>(() =>
+    Object.fromEntries((def?.filters || []).map((f) => [f.name, sp.get(f.name) || ""]).filter(([, v]) => v)));
   const [editing, setEditing] = useState<Row | "new" | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
   const L = useLabels();

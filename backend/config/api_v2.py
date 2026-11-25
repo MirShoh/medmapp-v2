@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from accounts import api as acc
 from accounts import social
-from analytics.api import DashboardView
+from analytics.api import ContentOverviewView, DashboardView
 from assistant.api import AssistantChatView, AssistantStatusView
 from cases import admin_api as cases
 from cases import portal_api as portal
@@ -101,6 +101,7 @@ urlpatterns = [
     path("files/<str:token>/", cases.FileDownloadView.as_view()),
     # patient portal
     path("me/overview/", portal.MeOverview.as_view()),
+    path("me/counters/", notif.CountersView.as_view()),
     path("me/chat/", chat.MyChatView.as_view()),
     path("me/chat/unread/", chat.MyChatUnreadView.as_view()),
     path("me/profile/", portal.MeProfile.as_view()),
@@ -115,6 +116,7 @@ urlpatterns = [
     path("partner/", include(partner.urls)),
     # staff
     path("admin/dashboard/", DashboardView.as_view()),
+    path("admin/content-overview/", ContentOverviewView.as_view()),
     path("admin/chats/", chat.ChatListView.as_view()),
     path("admin/chats/<int:patient_id>/", chat.ChatThreadView.as_view()),
     path("admin/staff/", acc.StaffDirectoryView.as_view()),

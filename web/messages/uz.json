@@ -431,7 +431,8 @@
     "translations": "Tarjimalar",
     "groupReference": "Ma’lumotnomalar",
     "leadSources": "So‘rov manbalari",
-    "chats": "Chatlar"
+    "chats": "Chatlar",
+    "contentHome": "Kontent paneli"
   },
   "partner": {
     "home": "Umumiy",
@@ -474,7 +475,8 @@
     "consentNote": "Yuborish orqali ma’lumotlaringiz shu so‘rov uchun qayta ishlanishiga rozilik bildirasiz.",
     "privacy": "Maxfiylik siyosati",
     "error": "Yuborib bo‘lmadi. Qayta urinib ko‘ring.",
-    "notDoctor": "Tibbiy tashxis qo‘yilmaydi — buni shifokor qiladi."
+    "notDoctor": "Tibbiy tashxis qo‘yilmaydi — buni shifokor qiladi.",
+    "close": "Yopish"
   },
   "footer": {
     "tagline": "Xorijda va O‘zbekistonda davolanish — bitta platformada.",
@@ -1258,7 +1260,12 @@
     "pick": "Chap tomondan suhbatni tanlang",
     "openPatient": "Bemor kartasi",
     "replyPlaceholder": "Javob yozing…",
-    "emptyStaff": "Bu suhbatda xabarlar yo‘q"
+    "emptyStaff": "Bu suhbatda xabarlar yo‘q",
+    "attach": "Fayl yoki rasm biriktirish",
+    "dropHere": "Faylni shu yerga tashlang",
+    "removeFile": "Faylni olib tashlash",
+    "fileType": "Bu turdagi fayl qabul qilinmaydi (PDF, rasm, Word, DICOM, ZIP mumkin).",
+    "fileSize": "Fayl {mb} MB dan katta."
   },
   "profileUi": {
     "completeness": "Profil to‘liqligi",
@@ -1274,7 +1281,12 @@
     "unknown": "Bilmayman",
     "allergiesPh": "Masalan: penitsillin, yong‘oq",
     "unsaved": "Saqlanmagan o‘zgarishlar bor",
-    "saved": "Barcha o‘zgarishlar saqlangan"
+    "saved": "Barcha o‘zgarishlar saqlangan",
+    "fillHint": "Klinika uchun kerak: {fields}. To‘ldirib qo‘ysangiz, ishingiz tezlashadi.",
+    "language": "Xabarlar tili",
+    "medicalHint": "Ixtiyoriy. Klinika uchun foydali: allergiya, dorilar, qon guruhi.",
+    "changePassword": "Parolni o‘zgartirish",
+    "passwordHint": "Kamida 8 belgi. SMS kod orqali kirgan bo‘lsangiz, parol shart emas."
   },
   "authQuick": {
     "byPassword": "Parol bilan",
@@ -1428,7 +1440,8 @@
       "unassigned_cases": "Koordinatorsiz holatlar",
       "reviews": "Tibbiy ko‘rib chiqish",
       "my_tasks": "Mening vazifalarim",
-      "pending_partners": "Tasdiq kutayotgan hamkorlar"
+      "pending_partners": "Tasdiq kutayotgan hamkorlar",
+      "payments_pending": "Kutilayotgan to‘lovlar"
     }
   },
   "p360": {
@@ -1645,6 +1658,131 @@
     "emptyListTitle": "Hozircha yo‘llanma yo‘q",
     "emptyListText": "Bemor sizning klinikangizga mos kelganda MedMapp koordinatori holatni shu yerga yuboradi.",
     "fillProfile": "Profilni to‘ldirish",
-    "emptyFilter": "Bu bo‘limda yo‘llanma yo‘q"
+    "emptyFilter": "Bu bo‘limda yo‘llanma yo‘q",
+    "step_case": "Holatni ko‘rib chiqing",
+    "step_opinion": "Tibbiy xulosa yuboring",
+    "step_quotation": "Narx taklifini yuboring",
+    "step_accept": "Bemorni qabul qiling",
+    "nowTitle": "Hozir nima qilish kerak",
+    "now_case": "Bemor ma’lumoti va hujjatlarini ko‘rib chiqing.",
+    "now_opinion": "Shifokoringiz xulosasini yozib yuboring — bemor uni MedMapp orqali oladi.",
+    "now_quotation": "Davolash rejasi va narxini yuboring (taxminiy bo‘lsa ham bo‘ladi).",
+    "now_accept": "Bemor sizni tanlasa, uni qabul qila olishingizni tasdiqlang.",
+    "go_case": "Hujjatlarni ochish",
+    "go_opinion": "Xulosa yozish",
+    "go_quotation": "Taklif yozish",
+    "allDone": "Hammasi bajarildi. Bemor bilan bog‘liq savollar bo‘lsa, “Xabarlar”da yozing.",
+    "declinedText": "Siz bu yo‘llanmani rad etgansiz.",
+    "cannotTake": "Bu bemorni qabul qila olmaymizmi? Rad etish",
+    "declineConfirm": "Yo‘llanmani rad etasizmi? MedMapp boshqa klinikani taklif qiladi.",
+    "tab_case": "Holat va hujjatlar",
+    "tab_opinion": "Xulosa",
+    "tab_quotation": "Narx taklifi"
+  },
+  "notifUi": {
+    "open": "Ochish",
+    "today": "Bugun",
+    "yesterday": "Kecha",
+    "all": "Hammasi",
+    "unread": "O‘qilmagan",
+    "subtitle": "Sizga tegishli barcha yangiliklar. Bosilsa, tegishli sahifa ochiladi.",
+    "none": "Hozircha bildirishnoma yo‘q",
+    "allRead": "Hammasi o‘qilgan",
+    "noneText": "Yangi xabar, ariza yoki o‘zgarish bo‘lsa, shu yerda va tepadagi qo‘ng‘iroqchada ko‘rinadi."
+  },
+  "workflow": {
+    "title": "Ish tartibingiz",
+    "sales_manager": {
+      "intro": "Har kuni shu tartibda ishlang: yangi arizalardan boshlab, chat va qo‘ng‘iroqlargacha.",
+      "s1": "Yangi arizalarni ko‘ring (oxirgi 24 soat)",
+      "s2": "Chatlarga javob bering",
+      "s3": "Bugungi qo‘ng‘iroqlarni qiling",
+      "s4": "Bosqichni yangilang va keyingi aloqa sanasini qo‘ying",
+      "s5": "Vazifalaringizni yoping"
+    },
+    "medical_coordinator": {
+      "intro": "Holatni ariza kelganidan to davolanishgacha olib borasiz.",
+      "s1": "Koordinatorsiz holatlarni oling",
+      "s2": "Hujjatlarni tekshiring",
+      "s3": "Holatni klinikaga yuboring",
+      "s4": "Xulosa va takliflarni bemorga yuboring",
+      "s5": "Safarni tayyorlang"
+    },
+    "finance_manager": {
+      "intro": "To‘lovlar va hisob-kitoblarni nazorat qilasiz.",
+      "s1": "Kutilayotgan to‘lovlarni tekshiring",
+      "s2": "Kelgan to‘lovni bank ma’lumoti bilan tasdiqlang",
+      "s3": "Qabul qilingan takliflarni ko‘ring",
+      "s4": "Oylik hisobotni ko‘ring"
+    },
+    "content_manager": {
+      "intro": "Sayt to‘liq, to‘g‘ri va uch tilda bo‘lishi uchun javobgarsiz.",
+      "s1": "Klinikalarga rasm qo‘shing",
+      "s2": "Ruscha va inglizcha tarjimalarni to‘ldiring",
+      "s3": "Yangi sharhlarni tekshirib, chop eting",
+      "s4": "Blog uchun maqola yozing",
+      "s5": "Saytda natijani tekshiring"
+    },
+    "admin": {
+      "intro": "Butun jamoa ishini kuzatasiz.",
+      "s1": "Bugungi muammoli joylarni ko‘ring",
+      "s2": "Yangi hamkor klinikalarni tasdiqlang",
+      "s3": "Menejersiz arizalarni taqsimlang",
+      "s4": "Hisobotlarni ko‘ring",
+      "s5": "Audit jurnalini tekshiring"
+    },
+    "super_admin": {
+      "intro": "Butun jamoa ishini kuzatasiz.",
+      "s1": "Bugungi muammoli joylarni ko‘ring",
+      "s2": "Yangi hamkor klinikalarni tasdiqlang",
+      "s3": "Menejersiz arizalarni taqsimlang",
+      "s4": "Hisobotlarni ko‘ring",
+      "s5": "Audit jurnalini tekshiring"
+    }
+  },
+  "contentUi": {
+    "title": "Kontent paneli",
+    "subtitle": "Saytdagi ma’lumotlar to‘liq va uch tilda bo‘lishi uchun nima qilish kerakligi.",
+    "todoTitle": "To‘ldirish kerak",
+    "allDone": "Hammasi to‘liq",
+    "statsTitle": "Saytda hozir",
+    "todo": {
+      "hospitalsNoPhoto": "Klinikada rasm yo‘q",
+      "hospitalsNoRu": "Klinika tavsifi ruschada yo‘q",
+      "hospitalsNoEn": "Klinika tavsifi inglizchada yo‘q",
+      "doctorsNoPhoto": "Shifokorda rasm yo‘q",
+      "reviewsPending": "Sharh tasdiq kutmoqda",
+      "blogDrafts": "Blog qoralamasi",
+      "treatmentsNoText": "Davolash turida tavsif yozilmagan"
+    },
+    "stats": {
+      "hospitals": "Klinikalar",
+      "doctors": "Shifokorlar",
+      "treatments": "Davolash turlari",
+      "posts": "Chop etilgan maqolalar",
+      "testimonials": "Bemor fikrlari",
+      "faqs": "Savol-javoblar"
+    }
+  },
+  "userMenu": {
+    "site": "Saytga o‘tish",
+    "language": "Til"
+  },
+  "caseP": {
+    "tabJourney": "Bosqichlar",
+    "nowAt": "Hozir: {step}",
+    "fromCoordinator": "Koordinatordan xabar",
+    "yourRequest": "Arizangiz matni",
+    "history": "Barcha o‘zgarishlar ({n})",
+    "step_request_received": "Arizangiz qabul qilindi. Tez orada koordinator biriktiriladi.",
+    "step_coordinator_assigned": "Shaxsiy koordinatoringiz siz bilan bog‘lanadi va kerakli hujjatlarni aytadi.",
+    "step_documents_review": "Koordinator hujjatlaringizni tekshiradi; kamchilik bo‘lsa, xabar beradi.",
+    "step_hospital_consultation": "Hujjatlaringiz hamkor klinika shifokorlariga yuborildi.",
+    "step_opinion_received": "Shifokor xulosasi tayyor — “Tibbiy xulosalar” bo‘limida o‘qing.",
+    "step_quotation_available": "Klinika narx taklifini yubordi — solishtirib, birini tanlang.",
+    "step_treatment_confirmed": "Davolash tasdiqlandi. Endi safar tayyorlanadi.",
+    "step_travel_preparation": "Viza, chipta, mehmonxona va kutib olish tayyorlanmoqda.",
+    "step_in_treatment": "Klinikada davolanyapsiz. Savollar bo‘lsa, koordinatorga yozing.",
+    "step_follow_up": "Uyga qaytgandan keyin natijalar kuzatiladi."
   }
 }

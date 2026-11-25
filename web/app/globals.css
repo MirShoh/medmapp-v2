@@ -81,6 +81,10 @@
 
 @layer base {
   html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  /* A grid without explicit columns gets one column that never grows past its container. Otherwise its implicit
+     column takes the width of wide content (a horizontally scrolling chip row) and the page scrolls sideways on
+     phones. grid-cols-* utilities still override this. */
+  .grid { grid-template-columns: minmax(0, 1fr); }
   body {
     @apply bg-mist text-ink antialiased font-sans;
     font-feature-settings: "cv11", "ss01";

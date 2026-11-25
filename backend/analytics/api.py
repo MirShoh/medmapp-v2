@@ -67,6 +67,15 @@ class DashboardView(APIView):
             "my_tasks_overdue": Task.objects.filter(assignee=request.user, status__in=["open", "in_progress"],
                                                     due_at__lt=now).count(),
         }
+        # each tile only for roles that can open the list it links to
+        needs = {"fresh_leads": "crm.view", "due_today": "crm.view", "overdue": "crm.view", "unassigned_leads": "crm.view",
+                 "unread_chats": "crm.edit", "unassigned_cases": "medical.view", "reviews": "medical.view",
+                 "my_tasks": "tasks.view", "my_tasks_overdue": "tasks.view"}
+        today = {k: v for k, v in today.items() if user_has_perm(request.user, needs.get(k, "dashboard.view"))}
+        if user_has_perm(request.user, "finance.view"):
+            from finance.models import Payment as _Payment
+
+            today["payments_pending"] = _Payment.objects.filter(status="pending", direction="incoming").count()
         if user_has_perm(request.user, "users.view"):
             today["pending_partners"] = User.objects.filter(account__role="hospital_partner", account__is_approved=False,
                                                             is_active=True).count()
@@ -132,4 +141,41 @@ class DashboardView(APIView):
                                 for a in AuditLog.objects.select_related("actor").exclude(action__startswith="auth.")[:12]]
             if user_has_perm(request.user, "audit.view") else [],
             "generated_at": now,
+        })
+
+
+class ContentOverviewView(APIView):
+    """What the content manager should work on: missing photos, missing translations, drafts, moderation."""
+
+    permission_classes = [HasPerm.of("catalog.view")]
+
+    def get(self, request):
+        from django.db.models import Q as _Q
+
+        from blog.models import Post
+        from catalog.models import FAQ, Review, Testimonial, Treatment
+        from clinics.models import Hospital
+        from doctors.models import Doctor
+
+        def missing(model, field, lang):
+            return model.objects.filter(_Q(**{f"{field}_{lang}__isnull": True}) | _Q(**{f"{field}_{lang}": ""}))
+
+        hospitals = Hospital.objects.filter(is_active=True)
+        doctors = Doctor.objects.filter(is_active=True)
+        treatments = Treatment.objects.filter(is_active=True)
+        return Response({
+            "hospitals": {"total": hospitals.count(),
+                          "no_photo": hospitals.filter(_Q(image="") | _Q(image__isnull=True)).count(),
+                          "no_ru": missing(Hospital, "description", "ru").filter(is_active=True).count(),
+                          "no_en": missing(Hospital, "description", "en").filter(is_active=True).count()},
+            "doctors": {"total": doctors.count(),
+                        "no_photo": doctors.filter(_Q(photo="") | _Q(photo__isnull=True)).count()},
+            # a treatment page is empty until its overview is written (in the main language first)
+            "treatments": {"total": treatments.count(),
+                           "no_text": missing(Treatment, "overview", "uz").filter(is_active=True).count()},
+            "blog": {"published": Post.objects.filter(status="published").count(),
+                     "drafts": Post.objects.filter(status="draft").count()},
+            "reviews_pending": Review.objects.filter(is_published=False).count(),
+            "testimonials": Testimonial.objects.count(),
+            "faqs": FAQ.objects.filter(is_active=True).count(),
         })

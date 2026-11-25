@@ -431,7 +431,8 @@
     "translations": "Translations",
     "groupReference": "Reference data",
     "leadSources": "Lead sources",
-    "chats": "Chats"
+    "chats": "Chats",
+    "contentHome": "Content panel"
   },
   "partner": {
     "home": "Overview",
@@ -474,7 +475,8 @@
     "consentNote": "By sending you agree to your data being processed for this request.",
     "privacy": "Privacy policy",
     "error": "Could not send. Please try again.",
-    "notDoctor": "We do not diagnose — that is a doctor's job."
+    "notDoctor": "We do not diagnose — that is a doctor's job.",
+    "close": "Close"
   },
   "footer": {
     "tagline": "Treatment abroad and in Uzbekistan, one platform.",
@@ -1258,7 +1260,12 @@
     "pick": "Pick a conversation on the left",
     "openPatient": "Patient record",
     "replyPlaceholder": "Write a reply…",
-    "emptyStaff": "No messages in this conversation"
+    "emptyStaff": "No messages in this conversation",
+    "attach": "Attach a file or photo",
+    "dropHere": "Drop the file here",
+    "removeFile": "Remove file",
+    "fileType": "This file type is not accepted (PDF, photos, Word, DICOM, ZIP are).",
+    "fileSize": "The file is larger than {mb} MB."
   },
   "profileUi": {
     "completeness": "Profile completeness",
@@ -1274,7 +1281,12 @@
     "unknown": "I don't know",
     "allergiesPh": "e.g. penicillin, nuts",
     "unsaved": "You have unsaved changes",
-    "saved": "All changes saved"
+    "saved": "All changes saved",
+    "fillHint": "Needed by the hospital: {fields}. Filling them in speeds things up.",
+    "language": "Language for messages",
+    "medicalHint": "Optional. Useful for the hospital: allergies, medicines, blood type.",
+    "changePassword": "Change password",
+    "passwordHint": "At least 8 characters. If you sign in with an SMS code, a password is optional."
   },
   "authQuick": {
     "byPassword": "Password",
@@ -1428,7 +1440,8 @@
       "unassigned_cases": "Cases without a coordinator",
       "reviews": "Medical review",
       "my_tasks": "My tasks",
-      "pending_partners": "Partners awaiting approval"
+      "pending_partners": "Partners awaiting approval",
+      "payments_pending": "Expected payments"
     }
   },
   "p360": {
@@ -1645,6 +1658,131 @@
     "emptyListTitle": "No referrals yet",
     "emptyListText": "When a patient fits your hospital, a MedMapp coordinator sends the case here.",
     "fillProfile": "Complete your profile",
-    "emptyFilter": "No referrals in this section"
+    "emptyFilter": "No referrals in this section",
+    "step_case": "Review the case",
+    "step_opinion": "Send an opinion",
+    "step_quotation": "Send a quotation",
+    "step_accept": "Accept the patient",
+    "nowTitle": "What to do now",
+    "now_case": "Review the patient's details and documents.",
+    "now_opinion": "Write your doctor's opinion — the patient receives it through MedMapp.",
+    "now_quotation": "Send the treatment plan and price (an estimate is fine).",
+    "now_accept": "Confirm you can admit the patient if they choose you.",
+    "go_case": "Open documents",
+    "go_opinion": "Write opinion",
+    "go_quotation": "Write quotation",
+    "allDone": "All done. Questions about the patient go in the Messages tab.",
+    "declinedText": "You declined this referral.",
+    "cannotTake": "Can't take this patient? Decline",
+    "declineConfirm": "Decline this referral? MedMapp will offer the patient another hospital.",
+    "tab_case": "Case and documents",
+    "tab_opinion": "Opinion",
+    "tab_quotation": "Quotation"
+  },
+  "notifUi": {
+    "open": "Open",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "all": "All",
+    "unread": "Unread",
+    "subtitle": "Everything that concerns you. Click an item to open the related page.",
+    "none": "No notifications yet",
+    "allRead": "All caught up",
+    "noneText": "New messages, requests and changes appear here and in the bell at the top."
+  },
+  "workflow": {
+    "title": "Your routine",
+    "sales_manager": {
+      "intro": "Work in this order every day: from new requests to chats and calls.",
+      "s1": "Check new requests (last 24 h)",
+      "s2": "Answer chats",
+      "s3": "Make today's calls",
+      "s4": "Update the stage and set the next follow-up",
+      "s5": "Close your tasks"
+    },
+    "medical_coordinator": {
+      "intro": "You take a case from the request to the treatment.",
+      "s1": "Pick up cases without a coordinator",
+      "s2": "Check the documents",
+      "s3": "Refer the case to a hospital",
+      "s4": "Send opinions and quotations to the patient",
+      "s5": "Prepare the trip"
+    },
+    "finance_manager": {
+      "intro": "You keep payments and settlements in order.",
+      "s1": "Check expected payments",
+      "s2": "Confirm a received payment with its bank reference",
+      "s3": "Review accepted quotations",
+      "s4": "Read the monthly report"
+    },
+    "content_manager": {
+      "intro": "You make sure the site is complete, correct and in three languages.",
+      "s1": "Add photos to hospitals",
+      "s2": "Fill in Russian and English translations",
+      "s3": "Check and publish new reviews",
+      "s4": "Write a blog article",
+      "s5": "Check the result on the site"
+    },
+    "admin": {
+      "intro": "You oversee the whole team.",
+      "s1": "See today's problem spots",
+      "s2": "Approve new partner hospitals",
+      "s3": "Assign requests without a manager",
+      "s4": "Read the reports",
+      "s5": "Check the audit log"
+    },
+    "super_admin": {
+      "intro": "You oversee the whole team.",
+      "s1": "See today's problem spots",
+      "s2": "Approve new partner hospitals",
+      "s3": "Assign requests without a manager",
+      "s4": "Read the reports",
+      "s5": "Check the audit log"
+    }
+  },
+  "contentUi": {
+    "title": "Content panel",
+    "subtitle": "What to do so the site's information is complete and in three languages.",
+    "todoTitle": "To fill in",
+    "allDone": "Everything is complete",
+    "statsTitle": "On the site now",
+    "todo": {
+      "hospitalsNoPhoto": "Hospital without photo",
+      "hospitalsNoRu": "Hospital without Russian description",
+      "hospitalsNoEn": "Hospital without English description",
+      "doctorsNoPhoto": "Doctor without photo",
+      "reviewsPending": "Review awaiting moderation",
+      "blogDrafts": "Blog draft",
+      "treatmentsNoText": "Treatment without a description"
+    },
+    "stats": {
+      "hospitals": "Hospitals",
+      "doctors": "Doctors",
+      "treatments": "Treatments",
+      "posts": "Published articles",
+      "testimonials": "Patient stories",
+      "faqs": "FAQ entries"
+    }
+  },
+  "userMenu": {
+    "site": "Go to the website",
+    "language": "Language"
+  },
+  "caseP": {
+    "tabJourney": "Steps",
+    "nowAt": "Now: {step}",
+    "fromCoordinator": "Message from your coordinator",
+    "yourRequest": "Your request",
+    "history": "All changes ({n})",
+    "step_request_received": "Your request was received. A coordinator will be assigned soon.",
+    "step_coordinator_assigned": "Your coordinator will contact you and tell you which documents are needed.",
+    "step_documents_review": "Your coordinator checks the documents and tells you if anything is missing.",
+    "step_hospital_consultation": "Your documents were sent to the partner hospital's doctors.",
+    "step_opinion_received": "The doctor's opinion is ready — read it in the Opinions tab.",
+    "step_quotation_available": "The hospital sent a quotation — compare and choose.",
+    "step_treatment_confirmed": "Treatment is confirmed. The trip is being prepared.",
+    "step_travel_preparation": "Visa, flights, hotel and pickup are being arranged.",
+    "step_in_treatment": "You are in treatment. Questions go to your coordinator in the chat.",
+    "step_follow_up": "Your results are followed up after you are home."
   }
 }

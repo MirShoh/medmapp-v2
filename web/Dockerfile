@@ -9,7 +9,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG BACKEND_URL=http://backend:8000
 ARG NEXT_PUBLIC_SITE_URL=https://medmapp.uz
-ENV BACKEND_URL=$BACKEND_URL NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL NEXT_TELEMETRY_DISABLED=1
+# The API is not reachable during `docker build`: render pages without data, ISR fills them at runtime.
+ENV BACKEND_URL=$BACKEND_URL NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL NEXT_TELEMETRY_DISABLED=1 SKIP_BUILD_FETCH=1
 RUN npm run build
 
 FROM node:22-alpine

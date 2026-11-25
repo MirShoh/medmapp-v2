@@ -83,3 +83,67 @@ class TestIntegrationView(APIView):
         if res is None:
             return Response({"ok": False, "detail": "Not configured."}, status=400)
         return Response({"ok": bool(res), "detail": "Delivered." if res else "Delivery failed — see delivery log."})
+
+
+class CountersView(APIView):
+    """Numbers for the red badges in the header and the side menu, depending on who asks.
+
+    Everyone: unread notifications. Patients: operator replies, quotations awaiting an answer. Partners: new
+    referrals. Staff (by permission): unanswered chats, new requests, own open tasks, cases without a coordinator,
+    partners awaiting approval, reviews awaiting moderation.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Q
+
+        from accounts.models import Role, get_account
+        from accounts.permissions import user_has_perm
+
+        u = request.user
+        acc = get_account(u)
+        data = {"notifications": u.notifications.filter(read_at__isnull=True).count()}
+        role = acc.role if acc else None
+        if role == Role.PATIENT:
+            from cases.models import HospitalQuotation
+            from crm.models import SupportMessage
+
+            data["chat"] = SupportMessage.objects.filter(patient__user=u, from_staff=True, read_at__isnull=True).count()
+            data["quotations"] = HospitalQuotation.objects.filter(case__patient__user=u, status="sent").count()
+            return Response(data)
+        if role == Role.HOSPITAL_PARTNER:
+            from cases.models import CaseReferral
+
+            data["referrals"] = CaseReferral.objects.filter(hospital_id=acc.hospital_id, status="sent").count() if acc.hospital_id else 0
+            return Response(data)
+        can = lambda code: user_has_perm(u, code)  # noqa: E731
+        if can("crm.view"):
+            from crm.admin_api import DEMO_PREFIX
+            from crm.models import Lead, SupportMessage
+
+            data["chats"] = (SupportMessage.objects.filter(from_staff=False, read_at__isnull=True)
+                             .values("patient").distinct().count())
+            data["leads"] = Lead.objects.filter(stage="new").exclude(full_name__startswith=DEMO_PREFIX).count()
+        if can("tasks.view"):
+            from django.utils import timezone
+
+            from crm.models import Task
+
+            data["tasks"] = Task.objects.filter(assignee=u, status__in=["open", "in_progress"]).filter(
+                Q(due_at__isnull=True) | Q(due_at__lte=timezone.now() + timezone.timedelta(days=1))).count()
+        if can("medical.view"):
+            from cases.models import MedicalCase
+
+            data["cases"] = (MedicalCase.objects.filter(coordinator__isnull=True)
+                             .exclude(status__in=["closed", "cancelled"]).count())
+        if can("users.view"):
+            from django.contrib.auth import get_user_model
+
+            data["users"] = get_user_model().objects.filter(account__role="hospital_partner", account__is_approved=False,
+                                                            is_active=True).count()
+        if can("cms.edit"):
+            from catalog.models import Review
+
+            data["reviews"] = Review.objects.filter(is_published=False).count()
+        return Response(data)

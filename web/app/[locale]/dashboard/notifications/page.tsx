@@ -1,3 +1,3 @@
 "use client";
-import { NotificationsPage } from "@/components/admin/ops";
-export default function Page() { return <NotificationsPage />; }
+import { NotificationCenter } from "@/components/portal/notifications";
+export default function Page() { return <NotificationCenter />; }

@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowRight, CalendarClock, CheckCircle2, ChevronRight, FileText, FolderHeart, HeartPulse, Hotel, Lock, MessageCircle, Phone, Plane, Plus, Receipt,
+  ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, ChevronRight, FileText, FolderHeart, HeartPulse, Hotel, Lock, MessageCircle, Phone, Plane, Plus, Receipt,
   Send, ShieldCheck, Sparkles, Stethoscope, Trash2, Upload, UserRound,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -270,11 +270,16 @@ type CaseDetail = Case & {
   travel_plan: { arrival_date: string | null; departure_date: string | null; hotel_name: string; hotel_details: string; flight_details: string; airport_transfer: string; interpreter: string; visa_status: string; notes: string } | null;
 };
 
+type DetailTab = "overview" | "opinions" | "quotations" | "appointments" | "travel" | "documents";
+/** Which tab of the case page answers the current step's "what to do" (others link elsewhere). */
+const STEP_TAB: Record<string, DetailTab> = { opinion_received: "opinions", quotation_available: "quotations", treatment_confirmed: "travel", travel_preparation: "travel" };
+
+/** The patient's case: where it is, what they should do now, the whole journey explained, and the details. */
 export function PatientCaseDetail({ id }: { id: number }) {
   const t = useTranslations();
   const locale = useLocale();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"overview" | "opinions" | "quotations" | "appointments" | "travel" | "documents">("overview");
+  const [tab, setTab] = useState<DetailTab>("overview");
   const q = useQuery({ queryKey: ["me-case", id], queryFn: () => api<CaseDetail>(`/me/cases/${id}/`) });
   if (q.isLoading) return <LoadingBlock />;
   if (q.error || !q.data) return <ErrorBox message={(q.error as Error)?.message || t("common.error")} />;
@@ -285,66 +290,157 @@ export function PatientCaseDetail({ id }: { id: number }) {
       toast.success(t("common.saved"));
       qc.invalidateQueries({ queryKey: ["me-case", id] });
       qc.invalidateQueries({ queryKey: ["me-quotes"] });
+      qc.invalidateQueries({ queryKey: ["counters"] });
     } catch (e) { toast.error((e as Error).message); }
   };
+  const closed = ["closed", "cancelled"].includes(c.status);
+  const idx = Math.max(0, c.journey.findIndex((s) => s.current));
+  const current = c.journey[idx];
+  const pct = closed ? 100 : Math.round(((idx + 1) / c.journey.length) * 100);
+  // when each step was reached (first history entry with that status)
+  const reached: Record<string, string> = {};
+  for (const h of [...c.history].reverse()) reached[h.status] = h.date;
+  const tabs: { value: DetailTab; label: string; count?: number }[] = [
+    { value: "overview", label: t("caseP.tabJourney") },
+    ...(c.opinions.length ? [{ value: "opinions" as const, label: t("dash.opinions"), count: c.opinions.length }] : []),
+    ...(c.quotations.length ? [{ value: "quotations" as const, label: t("dash.quotations"), count: c.quotations.length }] : []),
+    ...(c.appointments.length ? [{ value: "appointments" as const, label: t("dash.appointments"), count: c.appointments.length }] : []),
+    ...(c.travel_plan ? [{ value: "travel" as const, label: t("dash.travel") }] : []),
+    { value: "documents", label: t("dash.documents"), count: c.documents.length },
+  ];
+  const next = !closed && current ? (NEXT[current.key] || { href: "", icon: Sparkles }) : null;
+  const nextTab = current ? STEP_TAB[current.key] : undefined;
+  const NextIcon = next?.icon || Sparkles;
   return (
     <>
-      <div className="card mb-5 p-5">
-        <div className="font-mono text-xs font-bold text-teal-700">{c.reference}</div>
-        <h1 className="mt-1 font-display text-2xl font-extrabold">{c.title}</h1>
-        <p className="text-sm text-ink-muted">{[c.specialty_name, c.hospital_name || c.destination_name, c.coordinator_name && `${t("dash.coordinator")}: ${c.coordinator_name}`].filter(Boolean).join(" · ")}</p>
-        <div className="mt-5"><Journey steps={c.journey.map((s) => ({ ...s, label: t(`case.${s.key}`) }))} /></div>
-        {c.patient_visible_note && <p className="mt-4 rounded-xl bg-teal-50 px-4 py-3 text-sm text-teal-900"><b>{t("dash.latestUpdate")}:</b> {c.patient_visible_note}</p>}
-      </div>
-      <Tabs className="mb-5" value={tab} onChange={setTab} tabs={[
-        { value: "overview", label: t("dash.journey") }, { value: "opinions", label: t("dash.opinions"), count: c.opinions.length },
-        { value: "quotations", label: t("dash.quotations"), count: c.quotations.length }, { value: "appointments", label: t("dash.appointments"), count: c.appointments.length },
-        { value: "travel", label: t("dash.travel") }, { value: "documents", label: t("dash.documents"), count: c.documents.length },
-      ]} />
-      {tab === "overview" && (
-        <Card>
-          {c.description && <p className="mb-5 whitespace-pre-line text-sm text-ink">{c.description}</p>}
-          <ol className="relative space-y-4 border-l border-line pl-5">
-            {c.history.map((h, i) => (
-              <li key={i} className="relative">
-                <span className="absolute -left-[25px] top-1 size-2.5 rounded-full bg-teal-500 ring-4 ring-white" />
-                <div className="text-sm font-semibold">{t(`case.${h.status}`)}</div>
-                {h.event && <div className="text-sm text-ink-soft">{caseEventText(t, h)}</div>}
-                {h.note && <div className="text-sm text-ink-soft">{h.note}</div>}
-                <div className="text-[11px] text-ink-muted">{date(h.date, locale, true)}</div>
-              </li>
-            ))}
-          </ol>
-        </Card>
-      )}
-      {tab === "opinions" && (c.opinions.length ? (
-        <div className="space-y-4">
-          <p className="rounded-xl bg-teal-50 px-4 py-3 text-xs text-teal-900">{t("so.notice")}</p>
-          {c.opinions.map((o) => (
-            <Card key={o.id}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-display font-bold">{o.doctor_name}{o.hospital_name && <span className="font-normal text-ink-muted"> · {o.hospital_name}</span>}</div>
-                <span className="text-xs text-ink-muted">{date(o.released_at || o.created_at, locale)}</span>
-              </div>
-              <p className="mt-3 whitespace-pre-line text-sm">{o.summary}</p>
-              {o.recommended_treatment && <p className="mt-3 text-sm"><b>{t("partner.recommended")}:</b> {o.recommended_treatment}</p>}
-              {o.has_file && <Button size="sm" variant="outline" className="mt-4" onClick={() => openSignedLink(`/me/opinions/${o.id}/link/`).catch((e) => toast.error(e.message))}><FileText className="size-4" />{t("common.download")}</Button>}
-            </Card>
-          ))}
-        </div>
-      ) : <Empty title={t("common.empty")} text={t("so.notice")} />)}
-      {tab === "quotations" && (c.quotations.length ? <div className="space-y-4">{c.quotations.map((x) => <QuoteCard key={x.id} q={x} onRespond={(a) => respond(x, a)} />)}</div> : <Empty title={t("common.empty")} />)}
-      {tab === "appointments" && (c.appointments.length ? (
-        <div className="card divide-y divide-line">{c.appointments.map((a) => (
-          <div key={a.id} className="flex flex-wrap items-center gap-3 p-4">
-            <CalendarClock className="size-5 text-teal-600" />
-            <div className="flex-1"><div className="font-semibold">{a.title}</div><div className="text-xs text-ink-muted">{[t(`ak.${a.kind}`), a.hospital_name, a.doctor_name, a.location].filter(Boolean).join(" · ")}</div></div>
-            <div className="text-right text-sm font-semibold">{date(a.scheduled_at, locale, true)}<div><Badge>{t(`as.${a.status}`)}</Badge></div></div>
+      <Link href="/dashboard/cases" className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted hover:text-teal-700"><ArrowLeft className="size-4" />{t("dash.cases")}</Link>
+      <div className="card mb-5 p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-extrabold leading-tight">{c.title}</h1>
+            <p className="mt-1 text-sm text-ink-muted">{[c.specialty_name, c.hospital_name || c.destination_name].filter(Boolean).join(" · ")}{c.specialty_name || c.hospital_name || c.destination_name ? " · " : ""}<span className="font-mono text-xs">{c.reference}</span></p>
           </div>
-        ))}</div>
-      ) : <Empty title={t("common.empty")} />)}
-      {tab === "travel" && (c.travel_plan ? <TravelCard p={c.travel_plan} /> : <Empty icon={<Plane className="size-5" />} title={t("common.empty")} />)}
-      {tab === "documents" && <DocList docs={c.documents} />}
+          <Badge tone={closed ? "neutral" : "teal"}>{t(`case.${c.status}`)}</Badge>
+        </div>
+        <div className="mt-5">
+          <div className="mb-2 flex items-baseline justify-between gap-2 text-sm">
+            <span className="font-semibold text-navy-900">{closed ? t(`case.${c.status}`) : t("caseP.nowAt", { step: current ? t(`case.${current.key}`) : "" })}</span>
+            <span className="text-xs font-semibold text-ink-muted">{closed ? "" : t("dashUi.stepOf", { n: idx + 1, total: c.journey.length })}</span>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-mist"><div className="h-full rounded-full bg-gradient-to-r from-teal-400 to-teal-600 transition-all" style={{ width: `${pct}%` }} /></div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-5">
+          {next && current && (
+            <div className="bg-hero relative overflow-hidden rounded-3xl p-5 text-white sm:p-6">
+              <div className="bg-grid pointer-events-none absolute inset-0" />
+              <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
+                <span className="hidden size-12 shrink-0 place-items-center rounded-2xl bg-teal-500 shadow-glow sm:grid"><NextIcon className="size-6" /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-green-300">{t("dashUi.nextStep")}</div>
+                  <p className="mt-1 font-display text-lg font-bold leading-snug text-white">{t(`dashUi.next_${current.key}`)}</p>
+                </div>
+                {nextTab && tabs.some((x) => x.value === nextTab) ? (
+                  <button type="button" onClick={() => setTab(nextTab)} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-navy-900 hover:bg-teal-50 sm:w-auto">{t(`dashUi.cta_${current.key}`)}<ArrowRight className="size-4" /></button>
+                ) : next.href ? (
+                  <Link href={next.href} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-navy-900 hover:bg-teal-50 sm:w-auto">{t(`dashUi.cta_${current.key}`)}<ArrowRight className="size-4" /></Link>
+                ) : null}
+              </div>
+            </div>
+          )}
+          {c.patient_visible_note && (
+            <div className="flex gap-3 rounded-2xl border border-teal-100 bg-teal-50 p-4">
+              <MessageCircle className="mt-0.5 size-5 shrink-0 text-teal-600" />
+              <div><div className="text-xs font-semibold uppercase tracking-wider text-teal-700">{t("caseP.fromCoordinator")}</div><p className="mt-0.5 text-sm text-teal-950">{c.patient_visible_note}</p></div>
+            </div>
+          )}
+
+          <Tabs value={tab} onChange={setTab} tabs={tabs} />
+
+          {tab === "overview" && (
+            <Card>
+              <ol className="space-y-1">
+                {c.journey.map((s, i) => {
+                  const now = s.current && !closed;
+                  return (
+                    <li key={s.key} className={cn("flex gap-3 rounded-xl p-3", now && "bg-teal-50 ring-1 ring-teal-200")}>
+                      <span className={cn("mt-0.5 grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold",
+                        s.done && !now ? "bg-teal-500 text-white" : now ? "bg-teal-500 text-white ring-4 ring-teal-100" : "bg-mist text-ink-muted")}>
+                        {s.done && !now ? <CheckCircle2 className="size-4" /> : i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                          <span className={cn("text-sm font-semibold", s.done || now ? "text-navy-900" : "text-ink-muted")}>{t(`case.${s.key}`)}</span>
+                          {reached[s.key] && <span className="text-[11px] text-ink-muted">{date(reached[s.key], locale)}</span>}
+                        </div>
+                        <p className={cn("text-xs leading-relaxed", now ? "text-teal-900" : "text-ink-muted")}>{t(`caseP.step_${s.key}`)}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+              {c.description && (
+                <details className="mt-4 rounded-xl bg-mist/60 p-3 text-sm [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="cursor-pointer list-none font-semibold text-navy-900">{t("caseP.yourRequest")}</summary>
+                  <p className="mt-2 whitespace-pre-line text-ink-soft">{c.description}</p>
+                </details>
+              )}
+              {c.history.length > 0 && (
+                <details className="mt-3 rounded-xl bg-mist/60 p-3 text-sm [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="cursor-pointer list-none font-semibold text-navy-900">{t("caseP.history", { n: c.history.length })}</summary>
+                  <ol className="mt-3 space-y-3 border-l border-line pl-4">
+                    {c.history.map((h, i) => (
+                      <li key={i}>
+                        <div className="text-sm font-medium text-navy-900">{h.event ? caseEventText(t, h) : t(`case.${h.status}`)}</div>
+                        {h.note && <div className="text-sm text-ink-soft">{h.note}</div>}
+                        <div className="text-[11px] text-ink-muted">{date(h.date, locale, true)}</div>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+            </Card>
+          )}
+          {tab === "opinions" && (
+            <div className="space-y-4">
+              <p className="rounded-xl bg-teal-50 px-4 py-3 text-xs text-teal-900">{t("so.notice")}</p>
+              {c.opinions.map((o) => (
+                <Card key={o.id}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-display font-bold">{o.doctor_name}{o.hospital_name && <span className="font-normal text-ink-muted"> · {o.hospital_name}</span>}</div>
+                    <span className="text-xs text-ink-muted">{date(o.released_at || o.created_at, locale)}</span>
+                  </div>
+                  <p className="mt-3 whitespace-pre-line text-sm">{o.summary}</p>
+                  {o.recommended_treatment && <p className="mt-3 text-sm"><b>{t("partner.recommended")}:</b> {o.recommended_treatment}</p>}
+                  {o.has_file && <Button size="sm" variant="outline" className="mt-4" onClick={() => openSignedLink(`/me/opinions/${o.id}/link/`).catch((e) => toast.error(e.message))}><FileText className="size-4" />{t("common.download")}</Button>}
+                </Card>
+              ))}
+            </div>
+          )}
+          {tab === "quotations" && <div className="space-y-4">{c.quotations.map((x) => <QuoteCard key={x.id} q={x} onRespond={(a) => respond(x, a)} />)}</div>}
+          {tab === "appointments" && (
+            <div className="card divide-y divide-line">{c.appointments.map((a) => (
+              <div key={a.id} className="flex flex-wrap items-center gap-3 p-4">
+                <CalendarClock className="size-5 text-teal-600" />
+                <div className="flex-1"><div className="font-semibold">{a.title}</div><div className="text-xs text-ink-muted">{[t(`ak.${a.kind}`), a.hospital_name, a.doctor_name, a.location].filter(Boolean).join(" · ")}</div></div>
+                <div className="text-right text-sm font-semibold">{date(a.scheduled_at, locale, true)}<div><Badge>{t(`as.${a.status}`)}</Badge></div></div>
+              </div>
+            ))}</div>
+          )}
+          {tab === "travel" && c.travel_plan && <TravelCard p={c.travel_plan} />}
+          {tab === "documents" && (
+            <div className="space-y-3">
+              <Link href="/dashboard/documents" className="inline-flex h-10 items-center gap-2 rounded-xl bg-teal-500 px-4 text-sm font-semibold text-white hover:bg-teal-600"><Upload className="size-4" />{t("dash.uploadDocs")}</Link>
+              <DocList docs={c.documents} />
+            </div>
+          )}
+        </div>
+        <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+          <CoordinatorCard name={c.coordinator_name} />
+        </aside>
+      </div>
     </>
   );
 }
@@ -595,37 +691,24 @@ export function PatientRequests() {
 type Profile = { full_name: string; phone: string; email: string; passport_number: string; date_of_birth: string | null; gender: string; country: number | null; city: string; address: string; preferred_language: string; blood_type: string; allergies: string; chronic_conditions: string; current_medications: string; emergency_contact: string };
 const BLOOD = ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"];
 
-function Section({ id, icon: Icon, title, hint, children }: { id: string; icon: typeof UserRound; title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <Card id={id} className="scroll-mt-24">
-      <div className="mb-5 flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-600"><Icon className="size-5" /></span>
-        <div><h2 className="font-display text-lg font-bold">{title}</h2>{hint && <p className="text-xs text-ink-muted">{hint}</p>}</div>
-      </div>
-      {children}
-    </Card>
-  );
-}
-
+/** One short form: the essentials first, medical details and password folded away until needed. */
 export function PatientProfile() {
   const t = useTranslations();
   const pu = useTranslations("profileUi");
   const qc = useQueryClient();
-  const ref = useRefFilters();
   const q = useQuery({ queryKey: ["me-profile"], queryFn: () => api<Profile>("/me/profile/") });
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [pw, setPw] = useState({ old_password: "", new_password: "" });
   if (q.isLoading || !q.data) return <LoadingBlock />;
   const p = q.data;
-  const checks = [p.full_name, p.phone, p.email, p.passport_number, p.date_of_birth, p.gender, p.country, p.city, p.blood_type, p.emergency_contact];
-  const pct = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  const missing = [!p.passport_number && t("form.passport"), !p.date_of_birth && t("ui.dob")].filter(Boolean) as string[];
   const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
     setBusy(true);
     try {
-      await api("/me/profile/", { method: "PATCH", body: { ...fd, country: fd.country || null, date_of_birth: fd.date_of_birth || null } });
+      await api("/me/profile/", { method: "PATCH", body: { ...fd, date_of_birth: fd.date_of_birth || null } });
       toast.success(t("common.saved"));
       setDirty(false);
       qc.invalidateQueries({ queryKey: ["me-profile"] });
@@ -634,67 +717,72 @@ export function PatientProfile() {
   const changePw = async () => {
     try { await api("/auth/change-password/", { body: pw }); setPw({ old_password: "", new_password: "" }); toast.success(t("common.saved")); } catch (e) { toast.error((e as Error).message); }
   };
-  const jump = [["personal", pu("personal")], ["medical", pu("medical")], ["security", pu("security")], ["privacy", pu("privacy")]] as const;
+  const fold = "group rounded-2xl border border-line bg-white [&_summary::-webkit-details-marker]:hidden";
+  const foldHead = "flex cursor-pointer list-none items-center gap-3 px-5 py-4";
   return (
-    <>
-      <div className="mb-6 overflow-hidden rounded-3xl bg-navy-950 p-6 text-white sm:p-8">
-        <div className="flex flex-wrap items-center gap-5">
-          <span className="grid size-16 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 to-teal-600 font-display text-xl font-extrabold">{initials(p.full_name)}</span>
-          <div className="min-w-0 flex-1">
-            <h1 className="font-display text-2xl font-extrabold text-white">{p.full_name}</h1>
-            <p className="mt-0.5 text-sm text-white/60">{[p.phone, p.email].filter(Boolean).join(" · ")}</p>
-          </div>
-          <div className="w-full sm:w-64">
-            <div className="flex justify-between text-xs font-semibold"><span className="text-white/70">{pu("completeness")}</span><span className="text-teal-300">{pct}%</span></div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-all" style={{ width: `${pct}%` }} /></div>
-            {pct < 100 && <p className="mt-2 text-[11px] text-white/50">{pu("completeHint")}</p>}
-          </div>
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-6 flex items-center gap-4">
+        <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 to-teal-600 font-display text-lg font-extrabold text-white">{initials(p.full_name)}</span>
+        <div className="min-w-0">
+          <h1 className="truncate font-display text-2xl font-extrabold">{p.full_name}</h1>
+          <p className="text-sm text-ink-muted">{p.phone}</p>
         </div>
-        <nav className="mt-6 flex flex-wrap gap-2">
-          {jump.map(([id, label]) => <a key={id} href={`#${id}`} className="rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/20 hover:text-white">{label}</a>)}
-        </nav>
       </div>
-      <div className="max-w-4xl space-y-6">
-        <form onSubmit={save} onChange={() => setDirty(true)} className="space-y-6">
-          <Section id="personal" icon={UserRound} title={pu("personal")} hint={pu("personalHint")}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t("form.fullName")} required><Input name="full_name" defaultValue={p.full_name} required /></Field>
-              <Field label={t("form.phone")} required><Input name="phone" type="tel" defaultValue={p.phone} required /></Field>
-              <Field label={t("form.email")}><Input name="email" type="email" defaultValue={p.email} /></Field>
-              <Field label={t("form.passport")} hint={pu("passportHint")}><Input name="passport_number" defaultValue={p.passport_number} className="font-mono uppercase" placeholder="AA1234567" maxLength={20} autoComplete="off" /></Field>
-              <Field label={t("ui.dob")}><Input name="date_of_birth" type="date" defaultValue={p.date_of_birth || ""} /></Field>
-              <Field label={t("ui.gender")}><Select name="gender" defaultValue={p.gender}><option value="">—</option><option value="male">{t("ui.male")}</option><option value="female">{t("ui.female")}</option><option value="other">{t("ui.otherGender")}</option></Select></Field>
-              <Field label={t("common.country")}><Select name="country" defaultValue={p.country || ""}><option value="">—</option>{ref?.countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
-              <Field label={t("common.city")}><Input name="city" defaultValue={p.city} /></Field>
-              <Field label={t("ui.address")} className="sm:col-span-2"><Input name="address" defaultValue={p.address} /></Field>
-              <Field label={t("common.language")}><Select name="preferred_language" defaultValue={p.preferred_language}><option value="uz">O‘zbekcha</option><option value="ru">Русский</option><option value="en">English</option></Select></Field>
-              <Field label={t("ui.emergency")} hint={pu("emergencyHint")}><Input name="emergency_contact" defaultValue={p.emergency_contact} /></Field>
-            </div>
-          </Section>
-          <Section id="medical" icon={HeartPulse} title={pu("medical")} hint={t("dash.privateNote")}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t("ui.bloodType")}><Select name="blood_type" defaultValue={p.blood_type}><option value="">{pu("unknown")}</option>{BLOOD.map((b) => <option key={b} value={b}>{b}</option>)}{p.blood_type && !BLOOD.includes(p.blood_type) && <option value={p.blood_type}>{p.blood_type}</option>}</Select></Field>
-              <div className="hidden sm:block" />
-              <Field label={t("ui.allergies")} className="sm:col-span-2"><Textarea name="allergies" rows={2} defaultValue={p.allergies} placeholder={pu("allergiesPh")} /></Field>
-              <Field label={t("ui.chronic")} className="sm:col-span-2"><Textarea name="chronic_conditions" rows={2} defaultValue={p.chronic_conditions} /></Field>
-              <Field label={t("ui.meds")} className="sm:col-span-2"><Textarea name="current_medications" rows={2} defaultValue={p.current_medications} /></Field>
-            </div>
-          </Section>
-          <div className={cn("flex items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 pl-5 backdrop-blur transition", dirty && "sticky bottom-4 z-20 shadow-lift")}>
-            <span className="text-xs text-ink-muted">{dirty ? pu("unsaved") : pu("saved")}</span>
-            <Button type="submit" loading={busy} disabled={!dirty}>{t("common.save")}</Button>
+      {missing.length > 0 && <p className="mb-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{pu("fillHint", { fields: missing.join(", ") })}</p>}
+      <form onSubmit={save} onChange={() => setDirty(true)} className="space-y-4">
+        <Card>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("form.fullName")} required className="sm:col-span-2"><Input name="full_name" defaultValue={p.full_name} required autoComplete="name" /></Field>
+            <Field label={t("form.phone")} required><Input name="phone" type="tel" defaultValue={p.phone} required autoComplete="tel" /></Field>
+            <Field label={t("form.email")}><Input name="email" type="email" defaultValue={p.email} autoComplete="email" /></Field>
+            <Field label={t("form.passport")} hint={pu("passportHint")}><Input name="passport_number" defaultValue={p.passport_number} className="font-mono uppercase" placeholder="AA1234567" maxLength={20} autoComplete="off" /></Field>
+            <Field label={t("ui.dob")}><Input name="date_of_birth" type="date" defaultValue={p.date_of_birth || ""} /></Field>
+            <Field label={t("ui.gender")}><Select name="gender" defaultValue={p.gender}><option value="">—</option><option value="male">{t("ui.male")}</option><option value="female">{t("ui.female")}</option></Select></Field>
+            <Field label={t("common.city")}><Input name="city" defaultValue={p.city} autoComplete="address-level2" /></Field>
+            <Field label={pu("language")} className="sm:col-span-2">
+              <div className="grid grid-cols-3 gap-2">
+                {([["uz", "O‘zbekcha"], ["ru", "Русский"], ["en", "English"]] as const).map(([v, l]) => (
+                  <label key={v} className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-line-strong px-3 py-2.5 text-sm font-medium has-[:checked]:border-teal-500 has-[:checked]:bg-teal-50 has-[:checked]:text-teal-800">
+                    <input type="radio" name="preferred_language" value={v} defaultChecked={p.preferred_language === v} className="sr-only" />{l}
+                  </label>
+                ))}
+              </div>
+            </Field>
           </div>
-        </form>
-        <Section id="security" icon={Lock} title={pu("security")} hint={pu("securityHint")}>
-          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <Input type="password" autoComplete="current-password" placeholder={t("ui.currentPassword")} value={pw.old_password} onChange={(e) => setPw({ ...pw, old_password: e.target.value })} />
-            <Input type="password" autoComplete="new-password" placeholder={t("ui.newPassword")} minLength={8} value={pw.new_password} onChange={(e) => setPw({ ...pw, new_password: e.target.value })} />
-            <Button variant="secondary" disabled={!pw.old_password || pw.new_password.length < 8} onClick={changePw}>{t("common.save")}</Button>
+        </Card>
+        <details className={fold}>
+          <summary className={foldHead}>
+            <span className="grid size-9 place-items-center rounded-xl bg-teal-50 text-teal-600"><HeartPulse className="size-4" /></span>
+            <span className="flex-1"><span className="block font-semibold text-navy-900">{pu("medical")}</span><span className="text-xs text-ink-muted">{pu("medicalHint")}</span></span>
+            <ChevronRight className="size-4 text-ink-muted transition group-open:rotate-90" />
+          </summary>
+          <div className="grid gap-3 border-t border-line p-5 sm:grid-cols-2">
+            <Field label={t("ui.bloodType")}><Select name="blood_type" defaultValue={p.blood_type}><option value="">{pu("unknown")}</option>{BLOOD.map((b) => <option key={b} value={b}>{b}</option>)}{p.blood_type && !BLOOD.includes(p.blood_type) && <option value={p.blood_type}>{p.blood_type}</option>}</Select></Field>
+            <Field label={t("ui.emergency")} hint={pu("emergencyHint")}><Input name="emergency_contact" defaultValue={p.emergency_contact} /></Field>
+            <Field label={t("ui.allergies")} className="sm:col-span-2"><Textarea name="allergies" rows={2} defaultValue={p.allergies} placeholder={pu("allergiesPh")} /></Field>
+            <Field label={t("ui.chronic")} className="sm:col-span-2"><Textarea name="chronic_conditions" rows={2} defaultValue={p.chronic_conditions} /></Field>
+            <Field label={t("ui.meds")} className="sm:col-span-2"><Textarea name="current_medications" rows={2} defaultValue={p.current_medications} /></Field>
           </div>
-        </Section>
-        <Section id="privacy" icon={ShieldCheck} title={pu("privacy")} hint={t("dash.privateNote")}><PatientConsents embedded /></Section>
-      </div>
-    </>
+        </details>
+        <div className={cn("flex items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 pl-5 backdrop-blur transition", dirty && "sticky bottom-4 z-20 shadow-lift")}>
+          <span className="text-xs text-ink-muted">{dirty ? pu("unsaved") : pu("saved")}</span>
+          <Button type="submit" loading={busy} disabled={!dirty}>{t("common.save")}</Button>
+        </div>
+      </form>
+      <details className={cn(fold, "mt-4")}>
+        <summary className={foldHead}>
+          <span className="grid size-9 place-items-center rounded-xl bg-mist text-ink-soft"><Lock className="size-4" /></span>
+          <span className="flex-1 font-semibold text-navy-900">{pu("changePassword")}</span>
+          <ChevronRight className="size-4 text-ink-muted transition group-open:rotate-90" />
+        </summary>
+        <div className="space-y-3 border-t border-line p-5">
+          <Input type="password" autoComplete="current-password" placeholder={t("ui.currentPassword")} value={pw.old_password} onChange={(e) => setPw({ ...pw, old_password: e.target.value })} />
+          <Input type="password" autoComplete="new-password" placeholder={t("ui.newPassword")} minLength={8} value={pw.new_password} onChange={(e) => setPw({ ...pw, new_password: e.target.value })} />
+          <p className="text-xs text-ink-muted">{pu("passwordHint")}</p>
+          <Button variant="secondary" disabled={!pw.old_password || pw.new_password.length < 8} onClick={changePw}>{t("common.save")}</Button>
+        </div>
+      </details>
+    </div>
   );
 }
 

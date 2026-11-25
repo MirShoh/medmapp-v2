@@ -240,13 +240,24 @@ class Task(models.Model):
         return self.title
 
 
+def chat_storage():
+    from cases.models import private_storage
+
+    return private_storage
+
+
 class SupportMessage(models.Model):
     """Direct chat between a patient and MedMapp staff (one conversation per patient)."""
 
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="support_messages")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     from_staff = models.BooleanField(default=False, db_index=True)
-    text = models.TextField(max_length=4000)
+    text = models.TextField(max_length=4000, blank=True)
+    # optional file / photo (private storage: served only through signed, expiring links)
+    attachment = models.FileField(storage=chat_storage, upload_to="chat/%Y/%m/", blank=True, null=True, max_length=300)
+    attachment_name = models.CharField(max_length=255, blank=True)
+    attachment_size = models.PositiveIntegerField(default=0)
+    attachment_type = models.CharField(max_length=100, blank=True)
     read_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 

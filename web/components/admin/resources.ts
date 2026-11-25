@@ -221,6 +221,7 @@ export const RESOURCES: Record<string, ResourceDef> = {
   },
   reviews: {
     title: "admin.reviews", perm: "cms.edit",
+    filters: [{ name: "is_published", label: "Published", options: [{ value: "false", label: "Awaiting moderation" }, { value: "true", label: "Published" }] }],
     columns: [{ key: "author_name", label: "Author" }, { key: "rating", label: "Rating" }, { key: "is_verified", label: "Verified" }, { key: "is_published", label: "Published" }, { key: "created_at", label: "Date" }],
     fields: [
       { name: "hospital", label: "Hospital", type: "fk", ref: "hospitals", refLabel: "name" }, { name: "doctor", label: "Doctor", type: "fk", ref: "doctors", refLabel: "full_name" },

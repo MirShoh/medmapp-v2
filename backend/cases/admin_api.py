@@ -460,6 +460,14 @@ class FileDownloadView(APIView):
             if not ok:
                 raise Http404()
             f, name, obj = op.file, f"opinion-{op.case.reference}.pdf", op
+        elif data["k"] == "chat":
+            from crm.models import SupportMessage
+
+            m = SupportMessage.objects.filter(pk=data["i"]).select_related("patient").first()
+            ok = m and m.attachment and (user_has_perm(user, "crm.view") or m.patient.user_id == user.pk)
+            if not ok:
+                raise Http404()
+            f, name, obj = m.attachment, m.attachment_name or "file", m
         else:
             raise Http404()
         audit(request, "file.downloaded", obj, actor=user, summary=name)

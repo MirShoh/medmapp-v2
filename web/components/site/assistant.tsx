@@ -141,8 +141,10 @@ export function AssistantWidget() {
                   <div className="text-[11px] text-white/65">{online ? t("online") : t("offline")}</div>
                 </div>
                 {started && <button onClick={() => setMsgs([])} className="rounded-lg px-2 py-1 text-[11px] font-semibold text-white/70 hover:bg-white/10 hover:text-white">{t("restart")}</button>}
+                <button type="button" onClick={() => setOpen(false)} aria-label={t("close")} title={t("close")}
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white"><X className="size-5" /></button>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-3 flex gap-2 [&>*]:flex-1">
                 {site?.socials?.telegram && <Quick href={site.socials.telegram} icon={<Send className="size-4" />} label="Telegram" external />}
                 {tel && <Quick href={`tel:${tel}`} icon={<Phone className="size-4" />} label={t("call")} external />}
                 {isPatient

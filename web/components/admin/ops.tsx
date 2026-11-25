@@ -254,30 +254,6 @@ export function FinancePage() {
 }
 
 /* ---------------- Notifications ---------------- */
-type Notif = { id: number; type: string; title: string; body: string; link: string; read_at: string | null; created_at: string };
-export function NotificationsPage() {
-  const t = useTranslations();
-  const locale = useLocale();
-  const qc = useQueryClient();
-  const router = useRouter();
-  const q = usePaged<Notif>(["notifications-page"], "/notifications/?page_size=100");
-  const readAll = async () => { await api("/notifications/read_all/", { method: "POST" }); qc.invalidateQueries({ queryKey: ["notifications-page"] }); qc.invalidateQueries({ queryKey: ["notif-count"] }); };
-  return (
-    <>
-      <PageTitle title={t("dash.notifications")} actions={<Button variant="outline" onClick={readAll}>{t("dash.markAllRead")}</Button>} />
-      {q.isLoading ? <LoadingBlock /> : !q.data?.results.length ? <Empty title={t("common.empty")} /> : (
-        <div className="card divide-y divide-line">{q.data.results.map((n) => (
-          <button key={n.id} onClick={async () => { await api(`/notifications/${n.id}/read/`, { method: "POST" }); qc.invalidateQueries({ queryKey: ["notif-count"] }); if (n.link) router.push(n.link); }}
-            className={cn("flex w-full items-start gap-3 p-4 text-left hover:bg-mist/50", !n.read_at && "bg-teal-50/40")}>
-            <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", n.read_at ? "bg-line-strong" : "bg-teal-500")} />
-            <div className="flex-1"><div className="text-sm font-semibold">{n.title}</div>{n.body && <div className="text-sm text-ink-soft">{n.body}</div>}<div className="mt-1 text-[11px] text-ink-muted"><span className="rounded bg-mist px-1.5 py-0.5 font-semibold">{t.has(`notifType.${n.type}`) ? t(`notifType.${n.type}`) : n.type}</span> · {date(n.created_at, locale, true)}</div></div>
-          </button>
-        ))}</div>
-      )}
-    </>
-  );
-}
-
 /* ---------------- Users & roles ---------------- */
 type U = { id: number; username: string; email: string; first_name: string; last_name: string; is_active: boolean; role: string; phone: string; hospital: number | null; hospital_name: string | null; is_approved: boolean; last_login: string | null };
 type RoleDef = { value: string; label: string; is_staff: boolean; permissions: string[] };

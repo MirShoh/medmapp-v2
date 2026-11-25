@@ -919,3 +919,47 @@ class PerformanceTests(Base):
         with CaptureQueriesContext(connection) as ctx:
             self.assertEqual(c.get("/api/v2/admin/hospitals/?page_size=25").status_code, 200)
         self.assertLess(len(ctx.captured_queries), 15)
+
+
+class BadgesAndChatFilesTests(Base):
+    def test_counters_depend_on_role(self):
+        from crm.models import SupportMessage
+        p_user = self.user("patient", email="cp@t.local")
+        c = self.client_for(p_user)
+        c.post("/api/v2/me/chat/", {"text": "Salom"}, format="json")
+        staff = self.client_for(self.user("sales_manager", email="cs@t.local"))
+        data = staff.get("/api/v2/me/counters/").data
+        self.assertEqual(data["chats"], 1)
+        self.assertIn("notifications", data)
+        self.assertNotIn("cases", data)  # sales managers do not see medical cases
+        pid = SupportMessage.objects.first().patient_id
+        staff.post(f"/api/v2/admin/chats/{pid}/", {"text": "Javob"}, format="json")
+        self.assertEqual(c.get("/api/v2/me/counters/").data["chat"], 1)
+        content = self.client_for(self.user("content_manager", email="cc@t.local"))
+        self.assertIn("reviews", content.get("/api/v2/me/counters/").data)
+        self.assertEqual(content.get("/api/v2/admin/content-overview/").status_code, 200)
+        self.assertEqual(staff.get("/api/v2/admin/content-overview/").status_code, 200)  # catalog.view
+        self.assertEqual(c.get("/api/v2/admin/content-overview/").status_code, 403)
+
+    def test_chat_file_upload_and_signed_download(self):
+        p_user = self.user("patient", email="cf@t.local")
+        c = self.client_for(p_user)
+        r = c.post("/api/v2/me/chat/", {"text": "", "file": pdf("analiz.pdf")}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.data)
+        att = r.data["attachment"]
+        self.assertEqual(att["name"], "analiz.pdf")
+        self.assertFalse(att["is_image"])
+        self.assertEqual(APIClient().get(att["url"]).status_code, 200)  # signed link works without a session
+        bad = SimpleUploadedFile("x.exe", b"MZ....", content_type="application/octet-stream")
+        self.assertEqual(c.post("/api/v2/me/chat/", {"file": bad}, format="multipart").status_code, 400)
+        other = self.client_for(self.user("patient", email="cf2@t.local"))
+        self.assertEqual(other.get("/api/v2/me/chat/").data, [])
+        staff = self.client_for(self.user("sales_manager", email="cf3@t.local"))
+        rows = staff.get("/api/v2/admin/chats/").data
+        self.assertTrue(rows[0]["last_text"].startswith("📎"))
+
+    def test_dashboard_tiles_follow_permissions(self):
+        fin = self.client_for(self.user("finance_manager", email="fm@t.local"))
+        today = fin.get("/api/v2/admin/dashboard/").data["today"]
+        self.assertNotIn("unassigned_cases", today)
+        self.assertIn("payments_pending", today)

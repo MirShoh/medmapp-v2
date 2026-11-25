@@ -1,23 +1,24 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronDown, ExternalLink, Globe, LogOut, Menu, X, type LucideIcon } from "lucide-react";
+import { Bell, Building2, ChevronDown, ExternalLink, Globe, Inbox, LayoutDashboard, LogOut, Menu, MessagesSquare, UserRound, X, type LucideIcon } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Logo } from "@/components/site/logo";
 import { Button, LoadingBlock, Modal } from "@/components/ui";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { api, type Paginated } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { cn, date, initials } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
+import { CountBadge, NotificationsBell, useCounters } from "./notifications";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; perm?: string; exact?: boolean; badge?: number };
+/** `counter`: key in GET /me/counters/ shown as a red badge (e.g. "chats", "referrals"). */
+export type NavItem = { href: string; label: string; icon: LucideIcon; perm?: string; exact?: boolean; badge?: number; counter?: string };
 /** `collapsed`: folded by default (opens automatically when it holds the current page); state is remembered per browser. */
 export type NavGroup = { id?: string; label?: string; collapsed?: boolean; items: NavItem[] };
 
 export function PortalShell({ portal, groups, children, title }: { portal: "admin" | "dashboard" | "partner"; groups: NavGroup[]; children: ReactNode; title: string }) {
   const t = useTranslations();
   const { user, loading, logout, can } = useAuth();
+  const counters = useCounters(!!user && user.portal === portal);
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -44,6 +45,8 @@ export function PortalShell({ portal, groups, children, title }: { portal: "admi
   if (loading || !user || user.portal !== portal) return <div className="grid min-h-screen place-items-center"><LoadingBlock /></div>;
 
   const visible = groups.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || can(i.perm)) })).filter((g) => g.items.length);
+  // total of the menu badges, shown on the mobile menu button
+  const menuTotal = visible.flatMap((g) => g.items).reduce((sum, i) => sum + (i.counter && i.counter !== "notifications" ? counters[i.counter] || 0 : 0), 0);
   const isActive = (i: NavItem) => (i.exact ? pathname === i.href : pathname === i.href || pathname.startsWith(`${i.href}/`));
 
   const sidebar = (
@@ -73,7 +76,7 @@ export function PortalShell({ portal, groups, children, title }: { portal: "admi
                       <Link href={i.href} className={cn("flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-medium transition",
                         isActive(i) ? "bg-white/10 text-white shadow-[inset_2px_0_0_var(--color-teal-400)]" : "text-white/60 hover:bg-white/5 hover:text-white")}>
                         <i.icon className={cn("size-4", isActive(i) ? "text-teal-300" : "")} /><span className="flex-1">{i.label}</span>
-                        {!!i.badge && <span className="grid min-w-5 place-items-center rounded-full bg-teal-500 px-1.5 text-[10px] font-bold text-white">{i.badge > 99 ? "99+" : i.badge}</span>}
+                        <CountBadge n={i.badge ?? (i.counter ? counters[i.counter] : 0)} className="ring-navy-950" />
                       </Link>
                     </li>
                   ))}
@@ -100,20 +103,11 @@ export function PortalShell({ portal, groups, children, title }: { portal: "admi
       )}
       <div className="lg:pl-64">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-white/85 px-4 backdrop-blur sm:px-6">
-          <button className="grid size-9 place-items-center rounded-lg lg:hidden" onClick={() => setOpen(true)} aria-label="Menu"><Menu className="size-5" /></button>
+          <button className="relative grid size-9 place-items-center rounded-lg lg:hidden" onClick={() => setOpen(true)} aria-label="Menu"><Menu className="size-5" /><CountBadge n={menuTotal} className="absolute -right-1 -top-1" /></button>
           <div className="ml-auto flex items-center gap-1.5">
             <LangSwitch />
-            <NotificationsBell portal={portal} />
-            <div className="ml-2 flex items-center gap-3 border-l border-line pl-3">
-              <div className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white">{initials(user.full_name)}</div>
-              <div className="hidden leading-tight sm:block">
-                <div className="text-sm font-semibold text-navy-900">{user.full_name}</div>
-                <div className="text-[11px] text-ink-muted">{user.hospital?.name || (t.has(`roles.${user.role}`) ? t(`roles.${user.role}`) : user.role_label)}</div>
-              </div>
-              <button onClick={() => setAskLogout(true)} className="grid size-9 place-items-center rounded-lg text-ink-muted hover:bg-mist hover:text-danger" aria-label={t("auth.signOut")} title={t("auth.signOut")}>
-                <LogOut className="size-4" />
-              </button>
-            </div>
+            <NotificationsBell portal={portal} count={counters.notifications || 0} />
+            <UserMenu portal={portal} counters={counters} onLogout={() => setAskLogout(true)} />
           </div>
         </header>
         <main className="p-4 sm:p-6 lg:p-8">{children}</main>
@@ -131,75 +125,84 @@ export function PortalShell({ portal, groups, children, title }: { portal: "admi
   );
 }
 
+/** Avatar button in the header: who is signed in, shortcuts for this portal, language, sign out. */
+function UserMenu({ portal, counters, onLogout }: { portal: "admin" | "dashboard" | "partner"; counters: Record<string, number>; onLogout: () => void }) {
+  const t = useTranslations();
+  const { user, can } = useAuth();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const click = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", click);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", click); document.removeEventListener("keydown", key); };
+  }, [open]);
+  if (!user) return null;
+  const role = user.hospital?.name || (t.has(`roles.${user.role}`) ? t(`roles.${user.role}`) : user.role_label);
+  const links: [string, LucideIcon, string, number?][] = portal === "dashboard"
+    ? [["/dashboard/profile", UserRound, t("dash.profile")], ["/dashboard/support", MessagesSquare, t("chat.nav"), counters.chat], ["/dashboard/notifications", Bell, t("dash.notifications"), counters.notifications]]
+    : portal === "partner"
+      ? [["/partner/profile", Building2, t("partner.profile")], ["/partner/referrals", Inbox, t("partner.referrals"), counters.referrals], ["/partner/notifications", Bell, t("dash.notifications"), counters.notifications]]
+      : [...(can("dashboard.view") ? [["/admin", LayoutDashboard, t("admin.dashboard")] as [string, LucideIcon, string]] : []),
+        ["/admin/notifications", Bell, t("dash.notifications"), counters.notifications]];
+  return (
+    <div ref={ref} className="relative ml-1 border-l border-line pl-2 sm:ml-2 sm:pl-3">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="menu"
+        className={cn("flex items-center gap-2.5 rounded-xl p-1 pr-1.5 transition hover:bg-mist", open && "bg-mist")}>
+        <span className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-xs font-bold text-white">{initials(user.full_name)}</span>
+        <span className="hidden max-w-44 text-left leading-tight md:block">
+          <span className="block truncate text-sm font-semibold text-navy-900">{user.full_name}</span>
+          <span className="block truncate text-[11px] text-ink-muted">{role}</span>
+        </span>
+        <ChevronDown className={cn("hidden size-4 text-ink-muted transition sm:block", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-12 z-50 w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-line bg-white shadow-lift">
+          <div className="flex items-center gap-3 border-b border-line bg-mist/50 px-4 py-3.5">
+            <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-teal-400 to-teal-600 text-sm font-bold text-white">{initials(user.full_name)}</span>
+            <span className="min-w-0">
+              <span className="block truncate font-semibold text-navy-900">{user.full_name}</span>
+              <span className="block truncate text-xs text-ink-muted">{user.email || user.phone}</span>
+              <span className="mt-0.5 inline-block rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700">{role}</span>
+            </span>
+          </div>
+          <div className="p-1.5">
+            {links.map(([href, Icon, label, n]) => (
+              <Link key={href} href={href} role="menuitem" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-navy-900 hover:bg-mist">
+                <Icon className="size-4 text-ink-muted" /><span className="flex-1">{label}</span><CountBadge n={n} className="ring-0" />
+              </Link>
+            ))}
+            <Link href="/" role="menuitem" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-navy-900 hover:bg-mist">
+              <ExternalLink className="size-4 text-ink-muted" /><span className="flex-1">{t("userMenu.site")}</span>
+            </Link>
+          </div>
+          <div className="border-t border-line p-1.5">
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onLogout(); }}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-danger hover:bg-danger-soft">
+              <LogOut className="size-4" />{t("auth.signOut")}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LangSwitch() {
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   return (
     <div className="flex items-center rounded-lg border border-line bg-white p-0.5 text-xs font-semibold">
-      <Globe className="mx-1.5 size-3.5 text-ink-muted" />
+      <Globe className="mx-1.5 hidden size-3.5 text-ink-muted sm:block" />
       {(["uz", "ru", "en"] as const).map((l) => (
         <button key={l} onClick={() => router.replace(pathname, { locale: l })}
           className={cn("rounded-md px-2 py-1 uppercase", l === locale ? "bg-navy-900 text-white" : "text-ink-muted hover:text-navy-900")}>{l}</button>
       ))}
-    </div>
-  );
-}
-
-type Notif = { id: number; type: string; title: string; body: string; link: string; read_at: string | null; created_at: string };
-
-function NotificationsBell({ portal }: { portal: string }) {
-  const t = useTranslations();
-  const locale = useLocale();
-  const qc = useQueryClient();
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { data: count } = useQuery({ queryKey: ["notif-count"], queryFn: () => api<{ count: number }>("/notifications/unread_count/"), refetchInterval: 60_000 });
-  const { data } = useQuery({ queryKey: ["notif-list"], queryFn: () => api<Paginated<Notif>>("/notifications/?page_size=8"), enabled: open });
-  useEffect(() => {
-    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-  const go = async (n: Notif) => {
-    await api(`/notifications/${n.id}/read/`, { method: "POST" });
-    qc.invalidateQueries({ queryKey: ["notif-count"] });
-    qc.invalidateQueries({ queryKey: ["notif-list"] });
-    setOpen(false);
-    if (n.link) router.push(n.link.replace(/^\/(uz|ru|en)(?=\/)/, ""));
-  };
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setOpen((v) => !v)} className="relative grid size-9 place-items-center rounded-lg text-ink-soft hover:bg-mist" aria-label={t("dash.notifications")}>
-        <Bell className="size-[18px]" />
-        {!!count?.count && <span className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">{count.count > 99 ? "99+" : count.count}</span>}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-2xl border border-line bg-white shadow-lift">
-          <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <span className="font-display text-sm font-bold">{t("dash.notifications")}</span>
-            <button className="text-xs font-semibold text-teal-700" onClick={async () => { await api("/notifications/read_all/", { method: "POST" }); qc.invalidateQueries({ queryKey: ["notif-count"] }); qc.invalidateQueries({ queryKey: ["notif-list"] }); }}>{t("dash.markAllRead")}</button>
-          </div>
-          <ul className="max-h-96 divide-y divide-line overflow-y-auto">
-            {data?.results.length ? data.results.map((n) => (
-              <li key={n.id}>
-                <button onClick={() => go(n)} className={cn("block w-full px-4 py-3 text-left hover:bg-mist", !n.read_at && "bg-teal-50/50")}>
-                  <div className="flex items-start gap-2">
-                    {!n.read_at && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-teal-500" />}
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-navy-900">{n.title}</div>
-                      {n.body && <div className="line-clamp-2 text-xs text-ink-muted">{n.body}</div>}
-                      <div className="mt-1 text-[11px] text-ink-muted">{date(n.created_at, locale, true)}</div>
-                    </div>
-                  </div>
-                </button>
-              </li>
-            )) : <li className="px-4 py-8 text-center text-sm text-ink-muted">{t("common.empty")}</li>}
-          </ul>
-          <Link href={`/${portal}/notifications`} onClick={() => setOpen(false)} className="block border-t border-line px-4 py-2.5 text-center text-xs font-semibold text-teal-700">{t("common.viewAll")}</Link>
-        </div>
-      )}
     </div>
   );
 }

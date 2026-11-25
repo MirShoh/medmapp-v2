@@ -41,6 +41,42 @@ export function auditHref(type: string, id: string) {
   return ({ Lead: `/admin/crm?lead=${id}`, Patient: `/admin/patients/${id}`, MedicalCase: `/admin/cases/${id}` } as Record<string, string>)[type] || null;
 }
 
+/** Each role's daily routine as numbered steps that link to the right screen. */
+const ROLE_STEPS: Record<string, string[]> = {
+  sales_manager: ["/admin/crm?fresh=1", "/admin/chats", "/admin/crm?due_today=1", "/admin/crm", "/admin/tasks"],
+  medical_coordinator: ["/admin/cases?unassigned=1", "/admin/cases?status=documents_review", "/admin/cases", "/admin/quotations", "/admin/travel"],
+  finance_manager: ["/admin/finance", "/admin/finance", "/admin/quotations", "/admin/reports"],
+  content_manager: ["/admin/r/hospitals?has_image=false", "/admin/r/hospitals?missing_tr=ru", "/admin/r/reviews?is_published=false", "/admin/r/blog-posts", "/"],
+  admin: ["/admin", "/admin/users?role=hospital_partner", "/admin/crm?unassigned=1", "/admin/reports", "/admin/audit"],
+  super_admin: ["/admin", "/admin/users?role=hospital_partner", "/admin/crm?unassigned=1", "/admin/reports", "/admin/audit"],
+};
+
+export function RoleGuide({ role }: { role?: string }) {
+  const t = useTranslations("workflow");
+  const { user } = useAuth();
+  const r = role || user?.role || "";
+  const steps = ROLE_STEPS[r];
+  if (!steps) return null;
+  return (
+    <section className="mb-6 rounded-3xl border border-teal-100 bg-gradient-to-br from-teal-50 to-white p-5">
+      <div className="mb-3">
+        <h2 className="font-display text-lg font-bold text-navy-900">{t("title")}</h2>
+        <p className="text-xs text-ink-muted">{t(`${r}.intro`)}</p>
+      </div>
+      <ol className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        {steps.map((href, i) => (
+          <li key={i}>
+            <Link href={href} target={href === "/" ? "_blank" : undefined} className="group flex h-full gap-3 rounded-2xl border border-line bg-white p-3 transition hover:border-teal-300 hover:shadow-card">
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-teal-500 text-xs font-bold text-white">{i + 1}</span>
+              <span className="text-[13px] font-medium leading-snug text-navy-900 group-hover:text-teal-700">{t(`${r}.s${i + 1}`)}</span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function Today({ data }: { data: Record<string, number> }) {
   const t = useTranslations("dashboardUi");
   const tiles: [string, LucideIcon, string, "danger" | "warn" | "info"][] = [
@@ -52,6 +88,7 @@ function Today({ data }: { data: Record<string, number> }) {
     ["unassigned_cases", HeartPulse, "/admin/cases?unassigned=1", "warn"],
     ["reviews", FileSearch, "/admin/cases?status=documents_review", "info"],
     ["my_tasks", ListTodo, "/admin/tasks", "info"],
+    ["payments_pending", Wallet, "/admin/finance", "warn"],
     ["pending_partners", Handshake, "/admin/users?role=hospital_partner", "warn"],
   ];
   const shown = tiles.filter(([k]) => k in data);
@@ -103,6 +140,7 @@ export function AdminDashboard({ mode = "dashboard" }: { mode?: "dashboard" | "r
   return (
     <>
       <PageTitle title={mode === "reports" ? t("reports") : hello} subtitle={date(new Date().toISOString(), locale)} />
+      {mode === "dashboard" && <RoleGuide />}
       {mode === "dashboard" && q.data.today && <Today data={q.data.today} />}
       {mode === "dashboard" && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
