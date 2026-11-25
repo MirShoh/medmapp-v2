@@ -287,6 +287,67 @@ class PatientViewSet(AuditedModelViewSet):
             return Response({"detail": "Missing patients.delete permission."}, status=403)
         return super().destroy(request, *args, **kwargs)
 
+    @action(detail=False, methods=["get"])
+    def duplicates(self, request):
+        """Existing patients with the same phone (digits) or passport — checked while staff type a new patient."""
+        from accounts.social import normalize_phone
+
+        phone = normalize_phone(request.GET.get("phone"))
+        passport = "".join(str(request.GET.get("passport", "")).split()).upper()
+        found = {}
+        if phone:
+            # stored as typed ("+998 90 123-45-67"): match the last 7 digits with anything in between
+            for p in Patient.objects.filter(phone__regex=r"\D*".join(phone[-7:])):
+                if normalize_phone(p.phone) == phone:
+                    found[p.pk] = (p, "phone")
+        if len(passport) >= 5:
+            for p in Patient.objects.filter(passport_number=passport):
+                found.setdefault(p.pk, (p, "passport"))
+        return Response([{"id": p.pk, "full_name": p.full_name, "phone": p.phone, "match": why,
+                          "has_account": p.user_id is not None} for p, why in found.values()][:5])
+
+    @action(detail=True, methods=["post"])
+    def open_cabinet(self, request, pk=None):
+        """Give an office (walk-in) patient a personal cabinet: a password-less patient account on their phone.
+
+        The patient signs in on the site with a one-time SMS code. Staff confirm that the patient agreed to the
+        processing of personal data in the office; the consent is recorded with the staff member's name."""
+        from django.contrib.auth import get_user_model
+        from django.db import transaction
+
+        from accounts.models import Account, Role
+        from accounts.social import account_by_phone, normalize_phone
+        from audit.service import client_ip
+        from cases.models import ConsentRecord
+
+        p = self.get_object()
+        if p.user_id:
+            return Response({"detail": "This patient already has a cabinet.", "code": "has_account"}, status=409)
+        if request.data.get("consent") is not True:
+            return Response({"consent": ["Confirm that the patient agreed to personal data processing."]}, status=400)
+        phone = normalize_phone(p.phone)
+        if not phone:
+            return Response({"phone": ["The patient's phone number is not valid."]}, status=400)
+        if account_by_phone(phone):
+            return Response({"detail": "Another account already uses this phone number.", "code": "phone_taken"}, status=409)
+        User = get_user_model()
+        email = p.email.strip().lower()
+        if email and User.objects.filter(username__iexact=email).exists():
+            email = ""
+        with transaction.atomic():
+            first, _, last = p.full_name.strip().partition(" ")
+            user = User(username=email or f"phone-{phone}", email=email, first_name=first[:150], last_name=last[:150])
+            user.set_unusable_password()
+            user.save()
+            Account.objects.create(user=user, role=Role.PATIENT, phone=f"+{phone}", preferred_language=p.preferred_language or "uz")
+            p.user = user
+            p.save(update_fields=["user", "updated_at"])
+            ConsentRecord.objects.create(patient=p, scope="data_processing", ip_address=client_ip(request), recorded_by=request.user)
+        activity(patient=p, actor=request.user, type="note", message="Personal cabinet opened in the office",
+                 meta={"key": "cabinet_opened"})
+        audit(request, "patient.cabinet_opened", p, summary=p.full_name)
+        return Response({"has_account": True, "login_phone": f"+{phone}"}, status=201)
+
     @action(detail=True, methods=["get"])
     def profile(self, request, pk=None):
         """Patient 360°: everything in one payload, filtered by the caller's permissions."""

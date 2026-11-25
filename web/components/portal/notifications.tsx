@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Activity, AlarmClock, Bell, BellOff, Building2, CheckCheck, FileText, ListTodo, MessagesSquare, Receipt, UserPlus, Wallet,
+  Activity, AlarmClock, Bell, BellOff, Building2, CheckCheck, FileText, ListTodo, MessagesSquare, Receipt, UserPlus, Wallet, X,
   type LucideIcon,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Button, LoadingBlock } from "@/components/ui";
 import { Link, useRouter } from "@/i18n/navigation";
 import { api, type Paginated } from "@/lib/api";
+import { playPing } from "@/lib/sound";
 import { cn, date } from "@/lib/utils";
 
 /** Badge numbers for the header bell and the side menu (GET /me/counters/; keys depend on the role). */
@@ -53,6 +54,37 @@ function useMarkRead() {
   };
 }
 
+/** Pop-up card for a new notification: type icon, title, preview, one clear action, close. */
+function NotifToast({ n, onOpen, onClose, actionLabel, nowLabel }: {
+  n: Notif; onOpen?: () => void; onClose: () => void; actionLabel: string; nowLabel: string;
+}) {
+  const [Icon, tone] = typeIcon(n.type);
+  return (
+    <div className="pointer-events-auto relative flex w-[22rem] max-w-[calc(100vw-2rem)] gap-3 overflow-hidden rounded-2xl border border-line bg-white p-4 pr-10 shadow-lift">
+      <span className="absolute inset-y-0 left-0 w-1 bg-teal-500" />
+      <span className={cn("relative grid size-10 shrink-0 place-items-center rounded-xl", tone)}>
+        <Icon className="size-5" />
+        {n.type === "chat" && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-danger ring-2 ring-white" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <p className="min-w-0 truncate text-sm font-bold text-navy-900">{n.title}</p>
+          <span className="shrink-0 text-[11px] text-ink-muted">{nowLabel}</span>
+        </div>
+        {n.body && <p className="mt-0.5 line-clamp-2 break-words text-[13px] leading-snug text-ink-soft">{n.body}</p>}
+        {onOpen && (
+          <button onClick={onOpen} className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-500 px-3 text-xs font-semibold text-white transition hover:bg-teal-600">
+            {n.type === "chat" && <MessagesSquare className="size-3.5" />}{actionLabel}
+          </button>
+        )}
+      </div>
+      <button onClick={onClose} aria-label="Close" className="absolute right-2 top-2 grid size-7 place-items-center rounded-lg text-ink-muted transition hover:bg-mist hover:text-navy-900">
+        <X className="size-4" />
+      </button>
+    </div>
+  );
+}
+
 /**
  * Header bell: red count, dropdown with the latest items, a toast when something new arrives,
  * and the unread count in the browser tab title.
@@ -81,10 +113,12 @@ export function NotificationsBell({ portal, count }: { portal: string; count: nu
       api<Paginated<Notif>>("/notifications/?unread=1&page_size=1").then((r) => {
         const n = r.results[0];
         if (!n) return;
-        toast(n.title, {
-          description: n.body || undefined, icon: <Bell className="size-4 text-teal-600" />,
-          action: n.link ? { label: t("notifUi.open"), onClick: () => { void markRead(n); router.push(localLink(n.link)); } } : undefined,
-        });
+        if (n.type === "chat") playPing();
+        toast.custom((id) => (
+          <NotifToast n={n} onClose={() => toast.dismiss(id)}
+            actionLabel={n.type === "chat" ? t("notifUi.reply") : t("notifUi.open")} nowLabel={t("notifUi.now")}
+            onOpen={n.link ? () => { toast.dismiss(id); void markRead(n); router.push(localLink(n.link)); } : undefined} />
+        ), { duration: n.type === "chat" ? 10_000 : 7_000 });
       }).catch(() => undefined);
     }
     prev.current = count;

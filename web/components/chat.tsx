@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, Download, FileText, Loader2, MessageCircle, Paperclip, Phone, Search, Send, X } from "lucide-react";
+import { CheckCheck, Download, FileText, Globe, Loader2, MessageCircle, Paperclip, Phone, Search, Send, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -175,44 +175,85 @@ export function PatientChat() {
   );
 }
 
-/* ---------------- Staff: all conversations ---------------- */
+/* ---------------- Staff: all conversations (patients + site visitors) ---------------- */
 type ChatRow = { patient: number; name: string; phone: string; last_at: string; unread: number; last_text: string; last_from_staff: boolean };
+type VisitorRow = { visitor: number; name: string; phone: string; last_at: string; unread: number; last_text: string; last_from_staff: boolean };
+type Row = { key: string; kind: "p" | "v"; id: number; name: string; phone: string; last_at: string; unread: number; last_text: string; last_from_staff: boolean };
 type Thread = { patient: { id: number; name: string; phone: string; email: string }; messages: ChatMessage[] };
+type VisitorThread = { visitor: { id: number; name: string; phone: string; display_name: string; page: string }; messages: ChatMessage[] };
 
-export function StaffChats({ initial }: { initial?: number }) {
+export function StaffChats({ initial, initialVisitor }: { initial?: number; initialVisitor?: number }) {
   const t = useTranslations("chat");
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [active, setActive] = useState<number | null>(initial ?? null);
-  const list = useQuery({ queryKey: ["chats", search], queryFn: () => api<ChatRow[]>(`/admin/chats/${search ? `?q=${encodeURIComponent(search)}` : ""}`), refetchInterval: 8000 });
-  const thread = useQuery({ queryKey: ["chat", active], queryFn: () => api<Thread>(`/admin/chats/${active}/`), enabled: !!active, refetchInterval: 5000 });
-  useEffect(() => { if (!active && list.data?.length) setActive(list.data[0].patient); }, [list.data, active]);
-  useEffect(() => { qc.invalidateQueries({ queryKey: ["chats"] }); qc.invalidateQueries({ queryKey: ["counters"] }); }, [thread.data?.messages.length, qc]);
-  const open = (id: number) => { setActive(id); router.replace(`${pathname}?patient=${id}`, { scroll: false }); };
+  const [tab, setTab] = useState<"all" | "p" | "v">("all");
+  const [active, setActive] = useState<string | null>(initialVisitor ? `v${initialVisitor}` : initial ? `p${initial}` : null);
+  const qs = search ? `?q=${encodeURIComponent(search)}` : "";
+  const patients = useQuery({ queryKey: ["chats", search], queryFn: () => api<ChatRow[]>(`/admin/chats/${qs}`), refetchInterval: 5000 });
+  const visitors = useQuery({ queryKey: ["visitor-chats", search], queryFn: () => api<VisitorRow[]>(`/admin/visitor-chats/${qs}`), refetchInterval: 5000 });
+  const rows: Row[] = [
+    ...(patients.data || []).map((c) => ({ ...c, key: `p${c.patient}`, kind: "p" as const, id: c.patient })),
+    ...(visitors.data || []).map((c) => ({ ...c, key: `v${c.visitor}`, kind: "v" as const, id: c.visitor })),
+  ].filter((r) => tab === "all" || r.kind === tab)
+    .sort((a, b) => (b.unread > 0 ? 1 : 0) - (a.unread > 0 ? 1 : 0) || b.last_at.localeCompare(a.last_at));
+  const kind = active?.[0] as "p" | "v" | undefined;
+  const id = active ? Number(active.slice(1)) : 0;
+  const thread = useQuery<Thread | VisitorThread>({
+    queryKey: ["chat", active], enabled: !!active, refetchInterval: 3000,
+    queryFn: () => (kind === "v" ? api<VisitorThread>(`/admin/visitor-chats/${id}/`) : api<Thread>(`/admin/chats/${id}/`)),
+  });
+  const loadingLists = patients.isLoading || visitors.isLoading;
+  const firstKey = rows[0]?.key;
+  useEffect(() => { if (!active && !loadingLists && firstKey) setActive(firstKey); }, [firstKey, active, loadingLists]);
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["chats"] });
+    qc.invalidateQueries({ queryKey: ["visitor-chats"] });
+    qc.invalidateQueries({ queryKey: ["counters"] });
+  }, [thread.data?.messages.length, qc]);
+  const open = (r: Row) => { setActive(r.key); router.replace(`${pathname}?${r.kind === "v" ? "visitor" : "patient"}=${r.id}`, { scroll: false }); };
+  const vt = kind === "v" ? (thread.data as VisitorThread | undefined) : undefined;
+  const pt = kind === "p" ? (thread.data as Thread | undefined) : undefined;
+  const count = (k: "p" | "v") => ((k === "p" ? patients.data : visitors.data) || []).reduce((n, r) => n + (r.unread > 0 ? 1 : 0), 0);
+  const tabs: ["all" | "p" | "v", string][] = [["all", t("tabAll")], ["p", t("tabPatients")], ["v", t("tabVisitors")]];
   return (
     <>
       <PageTitle title={t("staffTitle")} subtitle={t("staffSubtitle")} />
-      <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="card flex max-h-[calc(100vh-13rem)] flex-col overflow-hidden">
-          <div className="relative border-b border-line p-3">
-            <Search className="absolute left-6 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
-            <Input className="h-9 pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("searchPatient")} />
+          <div className="space-y-2 border-b border-line p-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" />
+              <Input className="h-9 pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("searchPatient")} />
+            </div>
+            <div className="flex gap-1 rounded-xl bg-mist p-1 text-xs font-semibold">
+              {tabs.map(([k, label]) => (
+                <button key={k} onClick={() => setTab(k)}
+                  className={cn("flex flex-1 items-center justify-center gap-1 rounded-lg py-1.5 transition", tab === k ? "bg-white text-navy-900 shadow-sm" : "text-ink-muted hover:text-navy-900")}>
+                  {label}{k !== "all" && count(k) > 0 && <span className="grid min-w-4 place-items-center rounded-full bg-teal-500 px-1 text-[10px] text-white">{count(k)}</span>}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="scrollbar-thin flex-1 overflow-y-auto">
-            {!list.data?.length ? <p className="p-6 text-center text-sm text-ink-muted">{t("noChats")}</p> : list.data.map((c) => (
-              <button key={c.patient} onClick={() => open(c.patient)}
-                className={cn("flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left transition hover:bg-mist", active === c.patient && "bg-teal-50")}>
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-navy-900 text-xs font-bold text-white">{initials(c.name)}</span>
+            {!rows.length ? <p className="p-6 text-center text-sm text-ink-muted">{loadingLists ? "…" : t("noChats")}</p> : rows.map((c) => (
+              <button key={c.key} onClick={() => open(c)}
+                className={cn("flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left transition hover:bg-mist", active === c.key && "bg-teal-50")}>
+                <span className={cn("grid size-10 shrink-0 place-items-center rounded-full text-xs font-bold text-white", c.kind === "v" ? "bg-teal-600" : "bg-navy-900")}>
+                  {c.kind === "v" ? <Globe className="size-4" /> : initials(c.name)}
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-navy-900">{c.name}</span>
-                    <span className="shrink-0 text-[10px] text-ink-muted">{date(c.last_at, locale)}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className={cn("truncate text-sm text-navy-900", c.unread ? "font-bold" : "font-semibold")}>{c.name}</span>
+                      {c.kind === "v" && <span className="shrink-0 rounded bg-teal-50 px-1 text-[9px] font-bold uppercase text-teal-700">{t("visitorBadge")}</span>}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-ink-muted">{sameDay(c.last_at) ? time(c.last_at) : date(c.last_at, locale)}</span>
                   </span>
                   <span className="mt-0.5 flex items-center justify-between gap-2">
-                    <span className="truncate text-xs text-ink-muted">{c.last_from_staff ? `${t("you")}: ` : ""}{c.last_text}</span>
+                    <span className={cn("truncate text-xs", c.unread ? "font-semibold text-navy-900" : "text-ink-muted")}>{c.last_from_staff ? `${t("you")}: ` : ""}{c.last_text}</span>
                     {c.unread > 0 && <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-teal-500 px-1.5 text-[10px] font-bold text-white">{c.unread}</span>}
                   </span>
                 </span>
@@ -223,20 +264,44 @@ export function StaffChats({ initial }: { initial?: number }) {
         <div>
           {!active ? <Empty title={t("pick")} /> : (
             <>
-              {thread.data && (
+              {pt && (
                 <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
-                  <span className="font-display text-lg font-bold text-navy-900">{thread.data.patient.name}</span>
-                  {thread.data.patient.phone && <a href={`tel:${thread.data.patient.phone.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1 text-teal-700 hover:underline"><Phone className="size-3.5" />{thread.data.patient.phone}</a>}
-                  <Link href={`/admin/patients/${thread.data.patient.id}`} className="text-xs font-semibold text-ink-muted hover:text-navy-900">{t("openPatient")} →</Link>
+                  <span className="font-display text-lg font-bold text-navy-900">{pt.patient.name}</span>
+                  {pt.patient.phone && <a href={`tel:${telDigits(pt.patient.phone)}`} className="inline-flex items-center gap-1 text-teal-700 hover:underline"><Phone className="size-3.5" />{pt.patient.phone}</a>}
+                  <Link href={`/admin/patients/${pt.patient.id}`} className="text-xs font-semibold text-ink-muted hover:text-navy-900">{t("openPatient")} →</Link>
+                </div>
+              )}
+              {vt && (
+                <div className="mb-3">
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <span className="font-display text-lg font-bold text-navy-900">{vt.visitor.display_name}</span>
+                    <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-teal-700">{t("visitorBadge")}</span>
+                    {vt.visitor.phone
+                      ? <a href={`tel:${vt.visitor.phone}`} className="inline-flex items-center gap-1 text-teal-700 hover:underline"><Phone className="size-3.5" />{vt.visitor.phone}</a>
+                      : <span className="text-xs text-ink-muted">{t("noContact")}</span>}
+                    {vt.visitor.page && <span className="truncate text-xs text-ink-muted">{t("visitorPage")}: {vt.visitor.page}</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-ink-muted">{t("visitorHint")}</p>
                 </div>
               )}
               <Conversation messages={thread.data?.messages || []} loading={thread.isLoading} mine={(m) => m.from_staff}
                 placeholder={t("replyPlaceholder")} emptyText={t("emptyStaff")}
-                onSend={async (text, file) => { await postMessage(`/admin/chats/${active}/`, text, file); await thread.refetch(); }} />
+                onSend={async (text, file) => {
+                  await postMessage(kind === "v" ? `/admin/visitor-chats/${id}/` : `/admin/chats/${id}/`, text, file);
+                  await thread.refetch();
+                }} />
             </>
           )}
         </div>
       </div>
     </>
   );
+}
+
+function sameDay(iso: string) {
+  return new Date(iso).toDateString() === new Date().toDateString();
+}
+
+function telDigits(phone: string) {
+  return phone.replace(/[^0-9+]/g, "");
 }

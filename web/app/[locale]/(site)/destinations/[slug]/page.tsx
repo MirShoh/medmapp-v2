@@ -52,15 +52,12 @@ export default async function DestinationPage({ params }: P) {
         faqLd(c.faqs)]} />
       <section className="bg-hero relative overflow-hidden pb-12 pt-28 text-white lg:pt-36">
         { }
-        {hero && <img src={hero} alt={c.name} className="absolute inset-0 size-full object-cover opacity-55" />}
+        {hero && <img src={hero} alt={c.name} data-credit={c.hero_image_credit || undefined} data-source={c.hero_image_source || undefined} className="absolute inset-0 size-full object-cover opacity-55" fetchPriority="high" />}
         <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-navy-900/60 to-transparent" />
         <div className="container-x relative">
           <div className="text-6xl">{c.flag}</div>
           <h1 className="mt-3 font-display text-4xl font-extrabold text-white sm:text-6xl">{c.name}</h1>
           {c.tagline && <p className="mt-3 max-w-2xl text-lg text-white/75">{c.tagline}</p>}
-          {hero && c.hero_image_credit && (
-            <p className="mt-2 text-[11px] text-white/50">📷 {c.hero_image_source ? <a href={c.hero_image_source} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">{c.hero_image_credit}</a> : c.hero_image_credit}</p>
-          )}
           <div className="mt-8 max-w-3xl">
             <KeyFacts items={[
               { label: t("nav.hospitals"), value: c.hospitals_count }, { label: t("nav.doctors"), value: c.doctors_count },

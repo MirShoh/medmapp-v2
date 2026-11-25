@@ -7,7 +7,7 @@ export default function NotFound() {
       <body style={{ fontFamily: "system-ui, sans-serif", display: "grid", placeItems: "center", minHeight: "100vh", margin: 0, background: "#F5F9FC", color: "#0B2545" }}>
         <div style={{ textAlign: "center", padding: 24 }}>
           { }
-          <img src="/brand-icon.png" alt="MedMapp" width={64} height={64} />
+          <img src="/brand-mark.png" alt="MedMapp" width={64} height={64} />
           <h1 style={{ fontSize: 56, margin: "12px 0 4px", color: "#0D7BE8" }}>404</h1>
           <p style={{ margin: 0 }}>Sahifa topilmadi · Страница не найдена · Page not found</p>
           <p style={{ marginTop: 20, display: "flex", gap: 16, justifyContent: "center" }}>

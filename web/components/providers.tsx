@@ -13,7 +13,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={client}>
       <AuthProvider>
         {children}
-        <Toaster position="top-right" richColors closeButton />
+        <Toaster position="top-right" richColors closeButton offset={{ top: 88, right: 20 }} mobileOffset={{ top: 76, right: 12, left: 12 }} />
       </AuthProvider>
     </QueryClientProvider>
   );

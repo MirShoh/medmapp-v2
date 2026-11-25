@@ -266,3 +266,58 @@ Last updated: 2026-11-23 (audit round 2)
 - **Prices:** formatted by hand (`lib/utils.ts`) so the server and the browser render the same text (fixes a hydration mismatch with Uzbek/Russian currency formats); numbers keep their decimals.
 - **Docker / VPS:** the web image no longer tries to reach the API during `docker build` (`SKIP_BUILD_FETCH`); pages fill in at runtime via ISR. Simulated build: 153 pages in ~100 s. `.dockerignore` extended.
 - Checks: ruff, migrations, 71 backend tests, TypeScript, ESLint — all pass.
+
+## 2026-11-25 — Speed check, real logo, photos everywhere
+- Speed (local production build, phone size): home TTFB ~0.02-0.14 s, full load ~0.6-0.8 s, no layout shift, no horizontal scroll.
+- Logo: cut from the original brand files (D:/StartUp/MedMapp/Logo/.../LOGO NEW): `logo.webp` (light backgrounds),
+  `brand-mark.png` + `logo-text-light.webp` (dark backgrounds). Favicon / app icons regenerated from the original mark.
+  Header logo went from a 54 KB 512px PNG to 6-17 KB files.
+- New `backend/config/images.py`: every new upload to a public image field is resized to <=1920 px and saved as WebP
+  (pre_save signal, wired in core/apps.py). Test: ImageOptimisationTests.
+- Photos added to the database (media/, not in git): 74 hospitals, 26 specialties, 22 treatments, 8 blog posts,
+  4 countries. Source: Openverse, CC0 / public-domain only (StockSnap, Wikimedia, Flickr); rawpixel excluded (watermarked).
+  Hospital stock photos are marked "Illustrative photo · author · licence" in image_credit with a source link.
+  Doctors keep initials avatars on purpose: a stranger's photo under a real doctor's name would mislead patients.
+- Treatment images now show on treatment cards, the treatments explorer and the treatment page hero.
+- Deploy note: media/ and db.sqlite3 are not in git - copy them to the VPS (or re-upload) when deploying.
+
+## 2026-11-25 — Richer hospital pages, live search, home hero tweaks
+- Hospital page: factual auto-intro when the description is thin, "why patients choose" points built only from stored
+  facts (accreditation, type, specialties, years, doctors, travel), treatments grouped by specialty with indicative
+  country prices, "how treatment with MedMapp works" steps, trip block (visa/travel/languages from the country),
+  FAQ (+ FAQPage JSON-LD), "at a glance" sidebar, similar hospitals (same city first, shared specialties), sticky
+  "Get a free quote" bar on phones. API: HospitalDetail now returns `country`, `country_prices`, `similar`.
+- Photo credits are no longer shown on images; they stay in the DB and as data-credit / data-source attributes.
+  Note: CC BY-SA photos (the original Wikimedia hospital/country photos) legally need visible attribution.
+- Search: new `config/search.py` FoldingSearchFilter (default DRF search) ignores accents and apostrophes and searches
+  all languages (acibadem = Acıbadem, koz = ko‘z, кардио works). Falls back to DB search above 5000 rows.
+  Header search (`components/site/live-search.tsx`): results while typing, ↑↓/Enter, highlights, popular chips,
+  "see all hospitals (N)", Ctrl+K or "/" to open. List filter bars filter 300 ms after typing; search stays visible on phones.
+- Home hero: badge text without "MedMapp ·" ("…yagona platformada"); stats moved lower, trust points under the stats.
+
+## 2026-11-25 — Site widget is now a live chat with operators
+- New `crm.VisitorChat` / `crm.VisitorMessage` (migration crm/0009): visitors who are not signed in chat with
+  MedMapp staff from the site widget; the browser keeps the chat token (localStorage `mm_live_chat`).
+  API: `/api/v2/live-chat/` (GET ?token[&peek=1], POST text/file), `/live-chat/contact/` (optional name/phone),
+  `/live-chat/files/<id>/?token=` (visitor's own files). Throttle scope `live_chat` (120/min).
+- Signed-in patients use their existing patient chat from the widget (same thread as in the cabinet).
+- Files and photos both ways (same validation as medical documents; private storage; staff get signed links, kind `vchat`).
+- Widget polls every 3 s while open, every 25 s when closed (red unread badge on the launcher).
+- Admin "Chats" page shows patients and site visitors together (All / Patients / From site), thread refresh every 3 s;
+  visitor messages raise a staff notification (`chat_from_visitor`) and count in the red chats badge.
+- Chats never create leads; the widget's "Consultation" button opens the free-consultation form, which is the only lead source.
+- Visitor notifications: when an operator replies, the closed widget shows a preview card above the launcher,
+  plays a soft ping (`web/lib/sound.ts`, Web Audio) and puts "(n)" in the tab title; background tabs keep peeking
+  every 8 s without marking replies read.
+- Staff pop-ups redesigned (`NotifToast` in components/portal/notifications.tsx): type icon, preview, one action
+  ("Reply" for chats), close button, ping for chat messages. Toasts now sit below the header (Toaster offset).
+
+## 2026-11-25 — Walk-in (office) patients
+- Admin "Patients" → "New patient": short form for people who come to the office (name, phone, passport, DOB,
+  gender, language, country, city, manager = you by default); medical details folded; live duplicate warning by
+  phone digits or passport (`GET /admin/patients/duplicates/`).
+- "Open a personal cabinet" (on the form, and on any patient card without one): `POST /admin/patients/{id}/open_cabinet/`
+  creates a password-less patient account on the phone; the patient signs in with an SMS code. Staff must tick
+  that the patient consented to data processing; a ConsentRecord is stored with the staff member as recorder.
+- Optional "Also open a request" (for staff with medical.edit) creates a treatment case and opens it.
+- Walk-in patients are not leads.

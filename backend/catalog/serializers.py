@@ -1,3 +1,4 @@
+from django.utils.html import strip_tags
 from rest_framework import serializers
 
 from blog.models import Post
@@ -16,6 +17,12 @@ def lines(text):
 
 def csv(text):
     return [x.strip() for x in (text or "").split(",") if x.strip()]
+
+
+def plain(html, limit):
+    """Strip tags and clip to `limit` characters on a word boundary."""
+    text = " ".join(strip_tags(html or "").split())
+    return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
 
 
 class CountryMini(serializers.ModelSerializer):
@@ -205,13 +212,16 @@ class HospitalDetail(SanitizeHTMLMixin, HospitalCard):
     packages = serializers.SerializerMethodField()
     reviews = serializers.SerializerMethodField()
     prices = serializers.SerializerMethodField()
+    country_prices = serializers.SerializerMethodField()
+    country = serializers.SerializerMethodField()
 
     class Meta(HospitalCard.Meta):
         fields = HospitalCard.Meta.fields + (
             "hero_image", "description", "address", "latitude", "longitude", "website", "phone", "email",
             "icu_bed_count", "operating_rooms_count", "infrastructure_details", "guest_house_details",
             "gallery", "accreditations_full", "treatments", "facilities_list", "equipment_list", "services_list",
-            "languages_list", "doctors", "packages", "reviews", "prices", "meta_title", "meta_description", "image_source")
+            "languages_list", "doctors", "packages", "reviews", "prices", "country_prices", "country",
+            "meta_title", "meta_description", "image_source")
 
     def get_facilities_list(self, o):
         return lines(o.facilities)
@@ -241,6 +251,27 @@ class HospitalDetail(SanitizeHTMLMixin, HospitalCard):
                    "currency": "USD"} for p in o.prices.select_related("category").all()]
         published = TreatmentPriceSerializer(o.treatment_prices.select_related("treatment", "country"), many=True).data
         return {"legacy": legacy, "published": published}
+
+    def get_country_prices(self, o):
+        """Indicative country-level prices for the treatments this hospital offers: {treatment_id: {...}}."""
+        if not o.city_id:
+            return {}
+        rows = TreatmentPrice.objects.filter(country_id=o.city.country_id, hospital__isnull=True,
+                                             treatment__in=o.treatments.all()).order_by("price_from")
+        out = {}
+        for p in rows:
+            out.setdefault(str(p.treatment_id), {"price_from": p.price_from, "price_to": p.price_to, "currency": p.currency})
+        return out
+
+    def get_country(self, o):
+        """Destination facts for the trip-planning block (plain text, clipped)."""
+        c = o.city.country if o.city_id else None
+        if not c:
+            return None
+        return {"name": c.name, "slug": c.slug, "flag": c.flag, "tagline": c.tagline, "languages": c.languages,
+                "is_destination": c.is_destination, "intro": plain(c.intro, 420), "visa_info": plain(c.visa_info, 420),
+                "travel_info": plain(c.travel_info, 420), "accommodation_info": plain(c.accommodation_info, 300),
+                "hospitals_count": Hospital.objects.filter(city__country=c, is_active=True).count()}
 
 
 class CountryCard(serializers.ModelSerializer):

@@ -3,12 +3,12 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Globe, LayoutDashboard, Menu, Search, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
-import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { ConsultButton } from "./hero-actions";
+import { LiveSearch } from "./live-search";
 import { Logo } from "./logo";
 
 // Main menu: every section on one line (no "More" dropdown).
@@ -39,6 +39,18 @@ export function Header({ transparent }: { transparent?: boolean }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
   useEffect(() => setMobile(false), [pathname]);
+  // Ctrl+K / Cmd+K or "/" opens search from anywhere (except while typing in a field)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
+      if ((e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey)) || (e.key === "/" && !typing)) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const dark = transparent && !scrolled && !mobile;
   const portalHref = user ? `/${user.portal}` : "/login";
@@ -102,78 +114,7 @@ export function Header({ transparent }: { transparent?: boolean }) {
           </motion.div>
         )}
       </AnimatePresence>
-      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <LiveSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
-  );
-}
-
-type SearchResult = {
-  treatments: { name: string; slug: string }[];
-  hospitals: { name: string; slug: string; city: string }[];
-  doctors: { name: string; slug: string; specialty: string }[];
-  destinations: { name: string; slug: string; flag: string }[];
-};
-
-function SearchOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const t = useTranslations();
-  const [q, setQ] = useState("");
-  const [res, setRes] = useState<SearchResult | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 50);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (q.trim().length < 2) {
-      setRes(null);
-      return;
-    }
-    const id = setTimeout(() => {
-      api<SearchResult>(`/public/search/?q=${encodeURIComponent(q.trim())}`, { auth: false }).then(setRes).catch(() => setRes(null));
-    }, 220);
-    return () => clearTimeout(id);
-  }, [q]);
-
-  const groups: { label: string; items: { href: string; title: string; sub?: string }[] }[] = res ? [
-    { label: t("nav.treatments"), items: res.treatments.map((x) => ({ href: `/treatments/${x.slug}`, title: x.name })) },
-    { label: t("nav.hospitals"), items: res.hospitals.map((x) => ({ href: `/hospitals/${x.slug}`, title: x.name, sub: x.city })) },
-    { label: t("nav.doctors"), items: res.doctors.map((x) => ({ href: `/doctors/${x.slug}`, title: x.name, sub: x.specialty })) },
-    { label: t("nav.destinations"), items: res.destinations.map((x) => ({ href: `/destinations/${x.slug}`, title: `${x.flag} ${x.name}` })) },
-  ].filter((g) => g.items.length) : [];
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="fixed inset-0 z-[90] bg-navy-950/50 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-          <motion.div initial={{ y: -12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -12, opacity: 0 }}
-            className="mx-auto mt-[10vh] w-[calc(100%-2rem)] max-w-2xl overflow-hidden rounded-2xl bg-white shadow-lift" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 border-b border-line px-4">
-              <Search className="size-5 text-ink-muted" />
-              <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("nav.search")}
-                className="h-14 flex-1 bg-transparent text-[15px] text-navy-900 outline-none placeholder:text-ink-muted" />
-              <kbd className="rounded-md border border-line px-1.5 text-[11px] text-ink-muted">Esc</kbd>
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto p-2">
-              {groups.map((g) => (
-                <div key={g.label} className="mb-2">
-                  <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{g.label}</div>
-                  {g.items.map((it) => (
-                    <Link key={it.href} href={it.href} onClick={onClose} className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-mist">
-                      <span className="text-sm font-medium text-navy-900">{it.title}</span>
-                      {it.sub && <span className="text-xs text-ink-muted">{it.sub}</span>}
-                    </Link>
-                  ))}
-                </div>
-              ))}
-              {res && !groups.length && <p className="px-3 py-6 text-center text-sm text-ink-muted">{t("list.noResults")}</p>}
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
   );
 }

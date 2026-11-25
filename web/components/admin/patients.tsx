@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, HeartPulse, Mail, MessagesSquare, Pencil, Phone, Plus, Search, Send, ShieldCheck, Upload, UserRound } from "lucide-react";
+import { FileText, HeartPulse, KeyRound, Mail, MessagesSquare, Pencil, Phone, Search, Send, ShieldCheck, Upload, UserPlus, UserRound } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -38,7 +38,7 @@ export function PatientsList() {
   return (
     <>
       <PageTitle title={t("admin.patients")} subtitle={q.data && `${q.data.count} ${t("common.results")}`}
-        actions={can("patients.edit") && <Button onClick={() => setCreating(true)}><Plus className="size-4" />{t("common.add")}</Button>} />
+        actions={can("patients.edit") && <Button onClick={() => setCreating(true)}><UserPlus className="size-4" />{t("walkIn.newPatient")}</Button>} />
       <div className="card mb-4 flex flex-wrap items-center gap-2 p-3"><div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" /><Input className="h-9 pl-9" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("adminUi.patientSearch")} /></div>
         <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs font-semibold text-ink-soft"><input type="checkbox" checked={demo} onChange={(e) => { setDemo(e.target.checked); setPage(1); }} className="accent-teal-500" />{t("adminUi.showDemo")}</label></div>
       {q.isLoading ? <LoadingBlock /> : q.error ? <ErrorBox message={(q.error as Error).message} /> : (
@@ -59,7 +59,7 @@ export function PatientsList() {
           {pages > 1 && <div className="flex justify-end gap-2 border-t border-line p-3 text-sm"><Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t("common.back")}</Button><span>{page}/{pages}</span><Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>{t("common.next")}</Button></div>}
         </div>
       )}
-      <PatientFormModal open={creating} onClose={() => setCreating(false)} onSaved={(id) => router.push(`/admin/patients/${id}`)} />
+      {creating && <NewPatientModal open onClose={() => setCreating(false)} onSaved={(id, caseId) => { setCreating(false); router.push(caseId ? `/admin/cases/${caseId}` : `/admin/patients/${id}`); }} />}
     </>
   );
 }
@@ -102,6 +102,181 @@ function PatientFormModal({ open, onClose, onSaved, patient }: { open: boolean; 
         <Field label={t("p360.internalNotes")} className="sm:col-span-2"><Textarea name="medical_notes" rows={2} defaultValue={p?.medical_notes} /></Field>
         <Button type="submit" loading={busy} className="sm:col-span-2">{t("common.save")}</Button>
       </form>
+    </Modal>
+  );
+}
+
+/* ---------------- Walk-in patient: quick form for people who come to the office ---------------- */
+type Dup = { id: number; full_name: string; phone: string; match: "phone" | "passport"; has_account: boolean };
+
+/** Existing patients with the same phone / passport, checked while staff type (debounced). */
+function useDuplicates(phone: string, passport: string) {
+  const [dups, setDups] = useState<Dup[]>([]);
+  useEffect(() => {
+    const digits = phone.replace(/\D/g, "");
+    const pass = passport.replace(/\s/g, "");
+    if (digits.length < 9 && pass.length < 5) { setDups([]); return; }
+    const id = setTimeout(() => {
+      api<Dup[]>(`/admin/patients/duplicates/?phone=${encodeURIComponent(phone)}&passport=${encodeURIComponent(pass)}`)
+        .then(setDups).catch(() => setDups([]));
+    }, 400);
+    return () => clearTimeout(id);
+  }, [phone, passport]);
+  return dups;
+}
+
+function NewPatientModal({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: (id: number, caseId?: number) => void }) {
+  const t = useTranslations();
+  const w = useTranslations("walkIn");
+  const ref = useRefFilters();
+  const staff = useStaff();
+  const { user, can } = useAuth();
+  const [phone, setPhone] = useState("+998 ");
+  const [passport, setPassport] = useState("");
+  const [cabinet, setCabinet] = useState(true);
+  const [consent, setConsent] = useState(false);
+  const [withCase, setWithCase] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const dups = useDuplicates(phone, passport);
+  const me = staff.some((s) => s.id === user?.id) ? String(user?.id) : "";
+
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (cabinet && !consent) { setErrors({ consent: w("consentRequired") }); return; }
+    const fd = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    const body = { ...fd, country: fd.country || null, assigned_manager: fd.assigned_manager || null, date_of_birth: fd.date_of_birth || null };
+    setBusy(true);
+    setErrors({});
+    try {
+      const p = await api<{ id: number }>("/admin/patients/", { body });
+      let msg = w("saved");
+      if (cabinet) {
+        try {
+          const r = await api<{ login_phone: string }>(`/admin/patients/${p.id}/open_cabinet/`, { body: { consent: true } });
+          msg = w("cabinetOpened", { phone: r.login_phone });
+        } catch (err) { toast.error(`${w("cabinetFailed")}: ${(err as Error).message}`); }
+      }
+      let caseId: number | null = null;
+      if (withCase) {
+        try { caseId = (await api<{ id: number }>("/admin/cases/", { body: { patient: p.id, title: fd.full_name, case_type: "treatment" } })).id; }
+        catch (err) { toast.error((err as Error).message); }
+      }
+      toast.success(msg, { duration: 8000 });
+      onSaved(p.id, caseId ?? undefined);
+    } catch (err) {
+      setErrors(err instanceof ApiError ? err.fieldErrors() : {});
+      toast.error((err as Error).message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} wide title={w("title")}>
+      <p className="-mt-1 mb-4 text-sm text-ink-soft">{w("hint")}</p>
+      <form onSubmit={submit} className="space-y-4">
+        <section>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-muted">{w("main")}</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("form.fullName")} error={errors.full_name} required><Input name="full_name" required autoFocus autoComplete="off" /></Field>
+            <Field label={t("form.phone")} error={errors.phone} required>
+              <Input name="phone" required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="off" />
+            </Field>
+            <Field label={t("form.passport")} error={errors.passport_number}>
+              <Input name="passport_number" value={passport} onChange={(e) => setPassport(e.target.value.toUpperCase())} className="font-mono uppercase" maxLength={20} placeholder="AA1234567" />
+            </Field>
+            <Field label={t("ui.dob")}><Input name="date_of_birth" type="date" /></Field>
+            <Field label={t("ui.gender")}><Select name="gender" defaultValue=""><option value="">—</option><option value="male">{t("ui.male")}</option><option value="female">{t("ui.female")}</option></Select></Field>
+            <Field label={w("language")}>
+              <Select name="preferred_language" defaultValue="uz"><option value="uz">O‘zbekcha</option><option value="ru">Русский</option><option value="en">English</option></Select>
+            </Field>
+            <Field label={t("common.country")}><Select name="country" defaultValue=""><option value="">—</option>{ref?.countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
+            <Field label={t("common.city")}><Input name="city" /></Field>
+            <Field label={t("admin.manager")} className="sm:col-span-2">
+              <Select name="assigned_manager" defaultValue={me} key={me}><option value="">—</option>{staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select>
+            </Field>
+          </div>
+        </section>
+
+        {dups.length > 0 && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm">
+            <p className="font-semibold text-amber-800">{w("dupTitle")}</p>
+            <ul className="mt-1.5 space-y-1">
+              {dups.map((d) => (
+                <li key={d.id} className="flex flex-wrap items-center gap-2 text-amber-900">
+                  <span className="font-semibold">{d.full_name}</span><span className="text-xs">{d.phone} · {d.match === "phone" ? w("dupPhone") : w("dupPassport")}</span>
+                  <Link href={`/admin/patients/${d.id}`} onClick={onClose} className="ml-auto text-xs font-bold text-teal-700 hover:underline">{w("openCard")} →</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <details className="group rounded-2xl border border-line">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-navy-900 [&::-webkit-details-marker]:hidden">
+            {w("medical")}<span className="text-ink-muted transition group-open:rotate-45">+</span>
+          </summary>
+          <div className="grid gap-3 border-t border-line p-4 sm:grid-cols-2">
+            <Field label={t("ui.bloodType")}><Input name="blood_type" /></Field>
+            <Field label={t("ui.emergency")}><Input name="emergency_contact" /></Field>
+            <Field label={t("ui.allergies")} className="sm:col-span-2"><Textarea name="allergies" rows={2} /></Field>
+            <Field label={t("ui.chronic")} className="sm:col-span-2"><Textarea name="chronic_conditions" rows={2} /></Field>
+            <Field label={t("ui.meds")} className="sm:col-span-2"><Textarea name="current_medications" rows={2} /></Field>
+            <Field label={t("p360.internalNotes")} className="sm:col-span-2"><Textarea name="medical_notes" rows={2} /></Field>
+          </div>
+        </details>
+
+        <div className="space-y-3 rounded-2xl bg-mist p-4">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input type="checkbox" checked={cabinet} onChange={(e) => setCabinet(e.target.checked)} className="mt-0.5 size-4 accent-teal-500" />
+            <span><span className="block text-sm font-semibold text-navy-900">{w("cabinet")}</span>
+              <span className="block text-xs text-ink-muted">{w("cabinetHint", { phone: phone.trim() || "+998…" })}</span></span>
+          </label>
+          {cabinet && (
+            <label className={cn("ml-7 flex cursor-pointer items-start gap-3 rounded-xl border bg-white p-3", errors.consent ? "border-danger" : "border-line")}>
+              <input type="checkbox" checked={consent} onChange={(e) => { setConsent(e.target.checked); setErrors((x) => ({ ...x, consent: "" })); }} className="mt-0.5 size-4 accent-teal-500" />
+              <span className="text-xs leading-snug text-ink">{w("consent")}{errors.consent && <span className="mt-1 block font-semibold text-danger">{errors.consent}</span>}</span>
+            </label>
+          )}
+          {can("medical.edit") && (
+            <label className="flex cursor-pointer items-start gap-3">
+              <input type="checkbox" checked={withCase} onChange={(e) => setWithCase(e.target.checked)} className="mt-0.5 size-4 accent-teal-500" />
+              <span><span className="block text-sm font-semibold text-navy-900">{w("case")}</span><span className="block text-xs text-ink-muted">{w("caseHint")}</span></span>
+            </label>
+          )}
+        </div>
+        <Button type="submit" loading={busy} className="w-full">{w("save")}</Button>
+      </form>
+    </Modal>
+  );
+}
+
+/** Open a personal cabinet for an existing patient who has none (office visit). */
+function CabinetModal({ patient, onClose, onDone }: { patient: { id: number; full_name: string; phone: string }; onClose: () => void; onDone: () => void }) {
+  const w = useTranslations("walkIn");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const r = await api<{ login_phone: string }>(`/admin/patients/${patient.id}/open_cabinet/`, { body: { consent: true } });
+      toast.success(w("cabinetOpened", { phone: r.login_phone }), { duration: 8000 });
+      onDone();
+    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open onClose={onClose} title={w("cabinetTitle")}>
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-2xl bg-mist p-4">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-teal-500 text-white"><KeyRound className="size-5" /></span>
+          <div className="min-w-0 text-sm"><p className="font-bold text-navy-900">{patient.full_name}</p><p className="text-ink-soft">{patient.phone}</p></div>
+        </div>
+        <p className="text-sm leading-relaxed text-ink-soft">{w("cabinetHint", { phone: patient.phone })}</p>
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3">
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 size-4 accent-teal-500" />
+          <span className="text-xs leading-snug text-ink">{w("consent")}</span>
+        </label>
+        <Button className="w-full" loading={busy} disabled={!consent} onClick={go}><KeyRound className="size-4" />{w("openCabinet")}</Button>
+      </div>
     </Modal>
   );
 }
@@ -155,6 +330,7 @@ export function Patient360({ id }: { id: number }) {
   const { can } = useAuth();
   const [tab, setTab] = useState<TabKey>("overview");
   const [editing, setEditing] = useState(false);
+  const [cabinetFor, setCabinetFor] = useState(false);
   const [note, setNote] = useState("");
   const q = useQuery({ queryKey: ["patient360", id], queryFn: () => api<Profile>(`/admin/patients/${id}/profile/`) });
   const refresh = () => qc.invalidateQueries({ queryKey: ["patient360", id] });
@@ -209,6 +385,7 @@ export function Patient360({ id }: { id: number }) {
             {digits && <a href={`https://t.me/+${digits}`} target="_blank" rel="noopener noreferrer" className={quick}><Send className="size-3.5" />Telegram</a>}
             {p.email && <a href={`mailto:${p.email}`} className={quick}><Mail className="size-3.5" />Email</a>}
             <Link href={`/admin/chats?patient=${p.id}`} className={quick}><MessagesSquare className="size-3.5" />{t("p360.chat")}{d.chat?.total ? ` (${d.chat.total})` : ""}</Link>
+            {can("patients.edit") && !p.has_account && <Button size="sm" variant="outline" className="h-9" onClick={() => setCabinetFor(true)}><KeyRound className="size-3.5" />{t("walkIn.openCabinet")}</Button>}
             {can("patients.edit") && <Button size="sm" variant="outline" className="h-9" onClick={() => setEditing(true)}><Pencil className="size-3.5" />{t("common.edit")}</Button>}
             {can("medical.edit") && <Button size="sm" variant="secondary" className="h-9" onClick={openCase}><HeartPulse className="size-3.5" />{t("admin.createCase")}</Button>}
           </div>
@@ -322,6 +499,7 @@ export function Patient360({ id }: { id: number }) {
         </aside>
       </div>
       {editing && <PatientFormModal open patient={p} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh(); }} />}
+      {cabinetFor && <CabinetModal patient={p} onClose={() => setCabinetFor(false)} onDone={() => { setCabinetFor(false); refresh(); }} />}
     </>
   );
 }

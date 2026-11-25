@@ -27,6 +27,7 @@ TITLES = {
     "lead_assigned": {"uz": "Sizga so‘rov biriktirildi: {name}", "ru": "Вам назначена заявка: {name}", "en": "Lead assigned: {name}"},
     "payment_status": {"uz": "To‘lov {uid}: {status}", "ru": "Платёж {uid}: {status}", "en": "Payment {uid}: {status}"},
     "chat_from_patient": {"uz": "{name}: yangi xabar", "ru": "{name}: новое сообщение", "en": "{name}: new message"},
+    "chat_from_visitor": {"uz": "Saytdan yangi xabar: {name}", "ru": "Новое сообщение с сайта: {name}", "en": "New site message: {name}"},
     "chat_reply": {"uz": "MedMapp operatori javob berdi", "ru": "Оператор MedMapp ответил", "en": "A MedMapp operator replied"},
 }
 

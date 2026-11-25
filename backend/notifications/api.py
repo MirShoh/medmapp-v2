@@ -120,10 +120,12 @@ class CountersView(APIView):
         can = lambda code: user_has_perm(u, code)  # noqa: E731
         if can("crm.view"):
             from crm.admin_api import DEMO_PREFIX
-            from crm.models import Lead, SupportMessage
+            from crm.models import Lead, SupportMessage, VisitorMessage
 
             data["chats"] = (SupportMessage.objects.filter(from_staff=False, read_at__isnull=True)
-                             .values("patient").distinct().count())
+                             .values("patient").distinct().count()
+                             + VisitorMessage.objects.filter(from_staff=False, read_at__isnull=True)
+                             .values("chat").distinct().count())
             data["leads"] = Lead.objects.filter(stage="new").exclude(full_name__startswith=DEMO_PREFIX).count()
         if can("tasks.view"):
             from django.utils import timezone

@@ -267,3 +267,53 @@ class SupportMessage(models.Model):
 
     def __str__(self):
         return f"{self.patient_id}: {self.text[:40]}"
+
+
+def new_chat_token():
+    import secrets
+
+    return secrets.token_urlsafe(32)
+
+
+class VisitorChat(models.Model):
+    """Live chat started from the site widget by a visitor who is not signed in.
+
+    The visitor's browser keeps `token` (localStorage) and uses it to read and write this conversation. It is not a
+    lead: leads come only from the free-consultation form. Name and phone are optional ("so we can call you back").
+    """
+
+    token = models.CharField(max_length=64, unique=True, default=new_chat_token, editable=False)
+    name = models.CharField(max_length=120, blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+    language = models.CharField(max_length=5, default="uz")
+    page = models.CharField(max_length=300, blank=True, help_text="Page the visitor was on when writing")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ["-last_message_at"]
+
+    def __str__(self):
+        return self.name or f"Visitor #{self.pk}"
+
+    @property
+    def display_name(self):
+        return self.name or f"Mehmon #{self.pk}"
+
+
+class VisitorMessage(models.Model):
+    chat = models.ForeignKey(VisitorChat, on_delete=models.CASCADE, related_name="messages")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    from_staff = models.BooleanField(default=False, db_index=True)
+    text = models.TextField(max_length=4000, blank=True)
+    attachment = models.FileField(storage=chat_storage, upload_to="livechat/%Y/%m/", blank=True, null=True, max_length=300)
+    attachment_name = models.CharField(max_length=255, blank=True)
+    attachment_size = models.PositiveIntegerField(default=0)
+    attachment_type = models.CharField(max_length=100, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["chat", "created_at"])]

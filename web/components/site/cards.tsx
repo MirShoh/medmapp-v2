@@ -26,7 +26,7 @@ export function HospitalCard({ h, locale, labels }: { h: THospital } & L) {
       <div className={cn("relative h-40 overflow-hidden bg-gradient-to-br", st.bg)}>
         {img ? (
            
-          <img src={img} alt={h.name} className="size-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
+          <img src={img} alt={h.name} data-credit={h.image_credit || undefined} className="size-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
         ) : (
           <>
             <div className="bg-grid absolute inset-0 opacity-60" />
@@ -34,9 +34,6 @@ export function HospitalCard({ h, locale, labels }: { h: THospital } & L) {
           </>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-navy-950/80 via-navy-950/10 to-transparent" />
-        {img && h.image_credit && (
-          <span title={h.image_credit} className="absolute bottom-14 right-3 max-w-[75%] truncate rounded-full bg-black/45 px-2 py-0.5 text-[10px] text-white/80 opacity-0 backdrop-blur transition group-hover:opacity-100">📷 {h.image_credit}</span>
-        )}
         <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             {h.is_verified && <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-teal-700"><BadgeCheck className="size-3.5" />{labels.verified}</span>}
@@ -120,8 +117,15 @@ export function DoctorCard({ d, labels }: { d: TDoctor } & L) {
 }
 
 export function TreatmentCard({ t, locale, labels }: { t: Treatment } & L) {
+  const img = mediaUrl(t.image);
   return (
-    <Link href={`/treatments/${t.slug}`} className="card card-hover group flex flex-col p-5">
+    <Link href={`/treatments/${t.slug}`} className="card card-hover group flex flex-col overflow-hidden p-5">
+      {img && (
+        <div className="relative -mx-5 -mt-5 mb-4 aspect-[16/9] overflow-hidden bg-navy-800">
+          <img src={img} alt={t.name} className="size-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
+          <div className="absolute inset-0 bg-gradient-to-t from-navy-950/40 to-transparent" />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="grid size-11 place-items-center rounded-xl bg-teal-50 text-teal-600 transition group-hover:bg-teal-500 group-hover:text-white">
           <Icon name={t.specialty?.icon} className="size-5" />
@@ -144,13 +148,8 @@ export function CountryCard({ c, labels, className }: { c: TCountry; className?:
   return (
     <Link href={`/destinations/${c.slug}`} className={cn("group relative isolate flex min-h-56 flex-col justify-end overflow-hidden rounded-2xl bg-navy-800 p-5 text-white shadow-card", className)}>
       { }
-      {img && <img src={img} alt={c.name} className="absolute inset-0 -z-10 size-full object-cover transition duration-700 group-hover:scale-105" loading="lazy" />}
+      {img && <img src={img} alt={c.name} data-credit={c.hero_image_credit || undefined} className="absolute inset-0 -z-10 size-full object-cover transition duration-700 group-hover:scale-105" loading="lazy" />}
       <div className="absolute inset-0 -z-10 bg-gradient-to-t from-navy-950 via-navy-950/45 to-navy-950/5" />
-      {img && c.hero_image_credit && (
-        <span title={c.hero_image_credit} className="absolute left-3 top-3 z-10 max-w-[70%] truncate rounded-full bg-black/35 px-2 py-0.5 text-[10px] text-white/75 opacity-0 backdrop-blur transition group-hover:opacity-100">
-          📷 {c.hero_image_credit}
-        </span>
-      )}
       <span className="absolute right-4 top-4 z-10 text-4xl drop-shadow transition duration-500 group-hover:scale-110">{c.flag}</span>
       <div className="relative z-10 [text-shadow:0_2px_12px_rgb(0_0_0/0.55)]">
         <h3 className="font-display text-2xl font-extrabold !text-white" style={{ color: "#fff" }}>{c.name}</h3>

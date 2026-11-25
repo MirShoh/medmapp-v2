@@ -1,23 +1,24 @@
 import { cn } from "@/lib/utils";
 
-/** MedMapp brand mark: the blue cross with the white airplane and green dot (public/brand-icon.png). */
-export function Logo({ light, className, tagline = true }: { light?: boolean; className?: string; tagline?: boolean }) {
+/**
+ * MedMapp logo cut from the original brand files (D:/StartUp/MedMapp/Logo/.../LOGO NEW).
+ * Light backgrounds: the original full-colour wordmark. Dark backgrounds: the mark on a white tile (its plane is a
+ * transparent cut-out) next to the wordmark with white letters and the green tagline.
+ */
+export function Logo({ light, className }: { light?: boolean; className?: string }) {
+  if (!light) {
+    return (
+      <span className={cn("inline-flex items-center", className)}>
+        <img src="/logo.webp" alt="MedMapp" width={197} height={48} className="h-10 w-auto sm:h-12" decoding="async" />
+      </span>
+    );
+  }
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", light ? "bg-white shadow-sm" : "")}>
-        { }
-        <img src="/brand-icon.png" alt="" width={40} height={40} className={light ? "size-8" : "size-10"} />
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white shadow-sm">
+        <img src="/brand-mark.png" alt="" width={32} height={32} className="size-8" decoding="async" />
       </span>
-      <span className="flex flex-col leading-none">
-        <span className={cn("font-display text-[1.35rem] font-extrabold tracking-wide", light ? "text-white" : "text-brand-600")}>
-          MEDMAPP
-        </span>
-        {tagline && (
-          <span className={cn("mt-1 text-[0.52rem] font-semibold tracking-[0.2em]", light ? "text-green-300" : "text-green-600")}>
-            MEDICAL TOURISM PLATFORM
-          </span>
-        )}
-      </span>
+      <img src="/logo-text-light.webp" alt="MedMapp" width={163} height={36} className="h-8 w-auto sm:h-9" decoding="async" />
     </span>
   );
 }

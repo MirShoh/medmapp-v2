@@ -43,8 +43,10 @@ export default async function TreatmentPage({ params }: P) {
         description: clip(x.short_description || x.overview, 300) || undefined, preparation: clip(x.preparation, 500) || undefined,
         followup: clip(x.recovery_info, 500) || undefined,
       }, breadcrumbLd(locale, [["MedMapp", "/"], [t("nav.treatments"), "/treatments"], [x.name, `/treatments/${x.slug}`]]), faqLd(x.faqs)]} />
-      <section className="bg-hero pb-12 pt-28 text-white lg:pt-36">
-        <div className="container-x">
+      <section className="bg-hero relative overflow-hidden pb-12 pt-28 text-white lg:pt-36">
+        {x.image && <img src={mediaUrl(x.image)!} alt="" className="absolute inset-0 size-full object-cover opacity-35" fetchPriority="high" />}
+        <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-navy-900/75 to-navy-900/40" />
+        <div className="container-x relative">
           <Link href={`/treatments?specialty=${x.specialty.slug}`} className="eyebrow text-teal-300">{x.specialty.title}</Link>
           <h1 className="mt-3 max-w-3xl font-display text-4xl font-extrabold text-white sm:text-5xl">{x.name}</h1>
           {x.short_description && <p className="mt-4 max-w-2xl text-lg text-white/70">{x.short_description}</p>}

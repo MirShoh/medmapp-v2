@@ -6,6 +6,8 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
-        pass
+        from config.images import connect
+
+        connect()
 
 

@@ -174,7 +174,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
-        "rest_framework.filters.SearchFilter",
+        "config.search.FoldingSearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
     "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardPagination",
@@ -197,6 +197,8 @@ REST_FRAMEWORK = {
         "auth_refresh": os.getenv("THROTTLE_AUTH_REFRESH", "120/min"),
         "public_form": os.getenv("THROTTLE_FORM", "10/min"),
         "assistant": os.getenv("THROTTLE_ASSISTANT", "20/min"),
+        # site live chat: polling every few seconds while the widget is open, plus sending
+        "live_chat": os.getenv("THROTTLE_LIVE_CHAT", "120/min"),
     },
 }
 

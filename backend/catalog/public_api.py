@@ -9,6 +9,7 @@ from catalog.models import Testimonial
 from clinics.models import Hospital
 from cms.models import Banner, NavItem, Page, PageSection
 from config.html import SanitizeHTMLMixin, clean_html
+from config.search import fold, matching_ids
 from core.models import City, Country, SiteSettings, Specialty
 from doctors.models import Doctor
 
@@ -179,7 +180,7 @@ class TreatmentDetail(APIView):
 
 class HospitalList(generics.ListAPIView):
     serializer_class = S.HospitalCard
-    search_fields = ("name", "short_description", "city__name", "specialties__title")
+    search_fields = ("name", "short_description", "city__name", "city__country__name", "specialties__title", "treatments__name")
     ordering_fields = ("name", "min_price_usd", "rating", "founded_year", "bed_count")
 
     def get_queryset(self):
@@ -214,6 +215,22 @@ class HospitalDetail(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return hospital_qs().prefetch_related("gallery", "treatments__specialty")
+
+    def retrieve(self, request, *args, **kwargs):
+        h = self.get_object()
+        data = self.get_serializer(h).data
+        data["similar"] = S.HospitalCard(similar_hospitals(h), many=True, context=self.get_serializer_context()).data
+        return Response(data)
+
+
+def similar_hospitals(h, limit=6):
+    """Same country, ranked by shared specialties, same city first."""
+    if not h.city_id:
+        return []
+    spec = list(h.specialties.values_list("id", flat=True))
+    qs = (hospital_qs().filter(city__country_id=h.city.country_id).exclude(pk=h.pk)
+          .annotate(shared=Count("specialties", filter=Q(specialties__in=spec), distinct=True)))
+    return sorted(qs, key=lambda x: (x.city_id != h.city_id, -x.shared, not x.is_popular, x.name))[:limit]
 
 
 class HospitalCompare(APIView):
@@ -449,19 +466,39 @@ class SectionsView(APIView):
 
 
 class SearchView(APIView):
+    """Live search for the header box: every word must match (any apostrophe spelling); names that start with the
+    query come first."""
+
+    EMPTY = {"treatments": [], "hospitals": [], "doctors": [], "destinations": [], "hospitals_total": 0}
+
     def get(self, request):
-        q = request.GET.get("q", "").strip()
+        q = " ".join(request.GET.get("q", "").split())[:80]
         if len(q) < 2:
-            return Response({"treatments": [], "hospitals": [], "doctors": [], "destinations": []})
+            return Response(self.EMPTY)
+        def match(qs, fields):
+            return qs.filter(pk__in=matching_ids(qs, fields, q))
+
+        def ranked(objs, name, limit):
+            low = fold(q)
+            return sorted(objs, key=lambda o: (not fold(name(o)).startswith(low), low not in fold(name(o)), name(o)))[:limit]
+
+        treatments = match(Treatment.objects.filter(is_active=True).select_related("specialty"),
+                           ("name", "specialty__title", "short_description"))[:30]
+        hospitals_qs = match(Hospital.objects.filter(is_active=True).select_related("city__country"),
+                             ("name", "city__name", "city__country__name", "specialties__title", "treatments__name"))
+        doctors = match(Doctor.objects.filter(is_active=True).select_related("specialty"),
+                        ("full_name", "specialty_title", "specialty__title"))[:30]
+        countries = match(Country.objects.filter(is_active=True, is_destination=True), ("name",))[:4]
         return Response({
-            "treatments": [{"name": t.name, "slug": t.slug} for t in
-                           Treatment.objects.filter(is_active=True).filter(Q(name__icontains=q) | Q(specialty__title__icontains=q))[:6]],
-            "hospitals": [{"name": h.name, "slug": h.slug, "city": h.city.name} for h in
-                          Hospital.objects.filter(is_active=True, name__icontains=q).select_related("city")[:6]],
-            "doctors": [{"name": d.full_name, "slug": d.slug, "specialty": d.specialty_title} for d in
-                        Doctor.objects.filter(is_active=True).filter(Q(full_name__icontains=q) | Q(specialty_title__icontains=q))[:6]],
-            "destinations": [{"name": c.name, "slug": c.slug, "flag": c.flag} for c in
-                             Country.objects.filter(is_active=True, is_destination=True, name__icontains=q)[:4]],
+            "treatments": [{"name": t.name, "slug": t.slug, "specialty": t.specialty.title if t.specialty_id else ""}
+                           for t in ranked(treatments, lambda o: o.name, 6)],
+            "hospitals": [{"name": h.name, "slug": h.slug, "city": h.city.name if h.city_id else "",
+                           "country": h.city.country.name if h.city_id else "", "flag": h.city.country.flag if h.city_id else ""}
+                          for h in ranked(hospitals_qs[:60], lambda o: o.name, 6)],
+            "hospitals_total": hospitals_qs.count(),
+            "doctors": [{"name": d.full_name, "slug": d.slug, "specialty": d.specialty_title or (d.specialty.title if d.specialty_id else "")}
+                        for d in ranked(doctors, lambda o: o.full_name, 5)],
+            "destinations": [{"name": c.name, "slug": c.slug, "flag": c.flag} for c in countries],
         })
 
 

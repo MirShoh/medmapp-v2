@@ -1,25 +1,37 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Headset, MessagesSquare, Phone, Send, Sparkles, X } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Download, FileText, Headset, Loader2, MessagesSquare, Paperclip, Phone, Send, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "@/i18n/navigation";
+import { toast } from "sonner";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
+import { playPing } from "@/lib/sound";
+import { cn, fileSize } from "@/lib/utils";
+import { ConsultButton } from "./hero-actions";
 
 /**
- * Floating support widget. Works without AI: frequent questions are answered from the FAQ, anything else goes to
- * a coordinator as a request (or, for signed-in patients, to the operator chat). With ANTHROPIC_API_KEY set,
- * free-text questions are answered by the AI assistant first.
+ * Floating live chat. Visitors write to a MedMapp operator, who answers in real time from the admin "Chats" page.
+ * Text, photos and documents both ways. Signed-in patients use their own patient chat (same thread as in the
+ * cabinet); everyone else gets a visitor chat whose token lives in localStorage. Chats are not leads — leads come
+ * only from the free-consultation form (the "Consultation" button here opens it).
  */
 type Faq = { id: number; question: string; answer: string };
 type Site = { settings: { phone: string; socials: Record<string, string> } };
-type Msg =
-  | { kind: "text"; role: "user" | "assistant"; content: string }
-  | { kind: "handoff"; question: string }
-  | { kind: "done"; reference: string };
+type Attachment = { name: string; size: number; type: string; is_image: boolean; url: string | null };
+type Msg = { id: number; text: string; from_staff: boolean; author_name: string | null; created_at: string; read_at: string | null; attachment?: Attachment | null };
+type VisitorThread = { chat: { id: number; name: string; phone: string }; messages: Msg[] };
+
+const TOKEN_KEY = "mm_live_chat";
+const CONTACT_KEY = "mm_live_chat_contact";
+const ALLOWED = /\.(pdf|jpe?g|png|webp|dcm|docx?|txt|zip)$/i;
+const MAX_MB = 25;
+
+const store = {
+  get: (k: string) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
 
 /** Office hours in Tashkent (UTC+5): Mon–Sat 9:00–19:00. */
 function isOnline() {
@@ -29,109 +41,202 @@ function isOnline() {
   return day !== 0 && h >= 9 && h < 19;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[‘’ʻʼ'`]/g, "").replace(/[^\p{L}\p{N}\s]/gu, " ");
-
-/** Best FAQ for a free-text question (word-stem overlap, question words count double), or null. */
-function matchFaq(q: string, faqs: Faq[]) {
-  const words = norm(q).split(/\s+/).filter((w) => w.length >= 3).map((w) => w.slice(0, 5));
-  if (!words.length) return null;
-  let best: Faq | null = null;
-  let bestScore = 0;
-  for (const f of faqs) {
-    const qs = norm(f.question);
-    const as = norm(f.answer);
-    const score = words.reduce((s, w) => s + (qs.includes(w) ? 2 : as.includes(w) ? 1 : 0), 0);
-    if (score > bestScore) { best = f; bestScore = score; }
-  }
-  return bestScore >= Math.min(3, words.length + 1) ? best : null;
-}
+const hhmm = (iso: string) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 export function AssistantWidget() {
   const t = useTranslations("assistant");
+  const tc = useTranslations("chat");
   const locale = useLocale();
   const { user } = useAuth();
+  const isPatient = user?.portal === "dashboard";
   const [open, setOpen] = useState(false);
-  const [ai, setAi] = useState<boolean | null>(null);
   const [faqs, setFaqs] = useState<Faq[]>([]);
+  const [shownFaq, setShownFaq] = useState<Faq[]>([]);
   const [site, setSite] = useState<Site["settings"] | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [token, setToken] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [input, setInput] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [session, setSession] = useState("");
   const [online, setOnline] = useState(true);
+  const [askContact, setAskContact] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [notice, setNotice] = useState<{ author: string; text: string } | null>(null);
+  const lastStaff = useRef<number | null>(null); // newest operator message id already seen (null = not loaded yet)
+  const lastCount = useRef<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const pending = useRef<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hasChat = isPatient || !!token;
 
-  const say = (...m: Msg[]) => setMsgs((x) => [...x, ...m]);
+  useEffect(() => { setToken(store.get(TOKEN_KEY)); }, []);
 
-  const ask = useCallback(async (text: string, list: Faq[] = faqs, aiOn = ai) => {
-    say({ kind: "text", role: "user", content: text });
-    const hit = list.find((f) => f.question === text) || matchFaq(text, list);
-    if (hit) return say({ kind: "text", role: "assistant", content: hit.answer });
-    if (!aiOn) return say({ kind: "text", role: "assistant", content: t("handoffIntro") }, { kind: "handoff", question: text });
-    setBusy(true);
+  /** Fetch the conversation. `peek` (widget closed) does not mark operator replies as read. */
+  const load = useCallback(async (peek = false) => {
     try {
-      const r = await api<{ reply: string; session: string }>("/assistant/chat/", { body: { message: text, language: locale, session }, auth: false });
-      setSession(r.session);
-      say({ kind: "text", role: "assistant", content: r.reply });
+      if (isPatient) {
+        // the patient chat marks replies read on GET; while closed only ask for the unread count
+        if (peek) {
+          const n = (await api<{ count: number }>("/me/chat/unread/")).count;
+          if (lastCount.current !== null && n > lastCount.current) {
+            playPing();
+            setNotice({ author: t("operatorName"), text: "" });
+          }
+          lastCount.current = n;
+          setUnread(n);
+          return;
+        }
+        const list = await api<Msg[]>("/me/chat/");
+        setMsgs(list);
+        noticeNew(list, false);
+        lastCount.current = 0;
+        setUnread(0);
+      } else if (token) {
+        const r = await api<VisitorThread>(`/live-chat/?token=${encodeURIComponent(token)}${peek ? "&peek=1" : ""}`, { auth: false });
+        setMsgs(r.messages);
+        noticeNew(r.messages, peek);
+        setUnread(peek ? r.messages.filter((m) => m.from_staff && !m.read_at).length : 0);
+      }
+      setLoaded(true);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 503) setAi(false);
-      say({ kind: "text", role: "assistant", content: t("handoffIntro") }, { kind: "handoff", question: text });
-    } finally { setBusy(false); }
-  }, [faqs, ai, locale, session, t]);  
+      if (e instanceof ApiError && e.status === 404 && !isPatient) { store.set(TOKEN_KEY, ""); setToken(""); setMsgs([]); }
+    }
+  }, [isPatient, token]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // load FAQ, contacts and AI status once, the first time the widget opens
+  /** A new operator message the visitor has not seen yet: ping + preview card (closed widget or background tab). */
+  function noticeNew(list: Msg[], quiet: boolean) {
+    const newest = [...list].reverse().find((m) => m.from_staff);
+    if (!newest) { lastStaff.current = lastStaff.current ?? 0; return; }
+    if (lastStaff.current !== null && newest.id > lastStaff.current && quiet) {
+      playPing();
+      setNotice({ author: newest.author_name || t("operatorName"), text: newest.text || (newest.attachment ? `📎 ${newest.attachment.name}` : "") });
+    }
+    lastStaff.current = Math.max(lastStaff.current ?? 0, newest.id);
+  }
+
+  // Real time: every 3 s while open and visible (marks replies read). Otherwise peek every 8 s for the badge,
+  // the sound and the preview card, without marking anything read.
   useEffect(() => {
-    if (!open || ai !== null) return;
+    if (!hasChat) return;
+    const tick = () => { const active = open && document.visibilityState === "visible"; void load(!active); };
+    tick();
+    const id = setInterval(tick, open ? 3000 : 8000);
+    const onVis = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [open, hasChat, load]);
+
+  // unread count in the tab title; the preview card goes away once the chat is open
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\)\s*/, "");
+    document.title = unread ? `(${unread}) ${base}` : base;
+  }, [unread]);
+  useEffect(() => { if (open) setNotice(null); }, [open]);
+
+  // FAQ and contacts, the first time the widget opens
+  useEffect(() => {
+    if (!open || site) return;
     setOnline(isOnline());
     Promise.all([
-      api<{ configured: boolean }>("/assistant/status/", { auth: false }).then((r) => r.configured).catch(() => false),
       api<Faq[]>("/public/faqs/", { auth: false }).catch(() => [] as Faq[]),
       api<Site>("/public/site/", { auth: false }).then((r) => r.settings).catch(() => null),
-    ]).then(([aiOn, list, s]) => {
-      setAi(aiOn);
-      setFaqs(list);
-      setSite(s);
-      if (pending.current) { void ask(pending.current, list, aiOn); pending.current = null; }
-    });
-  }, [open, ai, ask]);
+    ]).then(([list, s]) => { setFaqs(list); setSite(s || { phone: "", socials: {} }); });
+  }, [open, site]);
 
-  // other parts of the site can open the widget: window.dispatchEvent(new CustomEvent("mm:open-support"))
+  // other parts of the site can open the widget: window.dispatchEvent(new CustomEvent("mm:open-support", {detail: {question}}))
   useEffect(() => {
     const onOpen = (e: Event) => {
       const q = (e as CustomEvent<{ question?: string }>).detail?.question;
       setOpen(true);
-      if (q) { if (ai === null) pending.current = q; else void ask(q); }
+      if (q) setInput(q);
+      setTimeout(() => inputRef.current?.focus(), 100);
     };
     window.addEventListener("mm:open-support", onOpen);
     return () => window.removeEventListener("mm:open-support", onOpen);
-  }, [ai, ask]);
+  }, []);
 
-  useEffect(() => { const el = box.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
+  useEffect(() => { const el = box.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs.length, shownFaq.length, open, askContact]);
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image/")) { setPreview(null); return; }
+    const u = URL.createObjectURL(file);
+    setPreview(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const pick = (f?: File | null) => {
+    if (!f) return;
+    if (!ALLOWED.test(f.name)) { toast.error(tc("fileType")); return; }
+    if (f.size > MAX_MB * 1024 * 1024) { toast.error(tc("fileSize", { mb: MAX_MB })); return; }
+    setFile(f);
+  };
+
+  const send = async () => {
     const text = input.trim();
-    if (!text || busy) return;
-    setInput("");
-    void ask(text);
+    if ((!text && !file) || busy) return;
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("text", text);
+      if (file) fd.append("file", file);
+      if (isPatient) {
+        await api("/me/chat/", file ? { form: fd } : { body: { text } });
+      } else {
+        fd.append("page", window.location.pathname);
+        fd.append("language", locale);
+        if (token) fd.append("token", token);
+        const r = await api<{ token: string }>("/live-chat/", { form: fd, auth: false });
+        if (r.token !== token) { store.set(TOKEN_KEY, r.token); setToken(r.token); }
+        if (!store.get(CONTACT_KEY)) setAskContact(true);
+      }
+      setInput("");
+      setFile(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? (Object.values(e.fieldErrors())[0] || e.message) : t("failed"));
+    } finally { setBusy(false); }
   };
 
   const tel = site?.phone?.replace(/[^\d+]/g, "");
-  const isPatient = user?.portal === "dashboard";
-  const started = msgs.length > 0;
+  const lastOwn = [...msgs].reverse().find((m) => !m.from_staff);
+  const waiting = !!lastOwn && !msgs.some((m) => m.from_staff && m.created_at > lastOwn.created_at);
 
   return (
     <>
+      <AnimatePresence>
+        {notice && !open && (
+          <motion.div initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}
+            className="fixed bottom-24 right-5 z-40 w-[min(20rem,calc(100vw-2.5rem))]">
+            <div role="status" className="relative cursor-pointer rounded-2xl border border-line bg-white p-3.5 pr-9 shadow-lift" onClick={() => setOpen(true)}>
+              <div className="flex items-center gap-2.5">
+                <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-hero text-teal-300"><Headset className="size-4" />
+                  <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-green-400 ring-2 ring-white" /></span>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-bold text-navy-900">{notice.author}</p>
+                  <p className="text-[11px] text-ink-muted">{t("newReply")}</p>
+                </div>
+              </div>
+              {notice.text && <p className="mt-2 line-clamp-3 break-words text-sm leading-snug text-ink">{notice.text}</p>}
+              <span className="mt-2.5 inline-flex h-8 items-center gap-1.5 rounded-lg bg-teal-500 px-3 text-xs font-semibold text-white"><MessagesSquare className="size-3.5" />{t("replyNow")}</span>
+              <button type="button" aria-label={t("close")} onClick={(e) => { e.stopPropagation(); setNotice(null); }}
+                className="absolute right-2 top-2 grid size-7 place-items-center rounded-lg text-ink-muted hover:bg-mist hover:text-navy-900"><X className="size-4" /></button>
+              <span className="absolute -bottom-1.5 right-7 size-3 rotate-45 border-b border-r border-line bg-white" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <button onClick={() => setOpen((v) => !v)} aria-label={t("title")} aria-expanded={open}
         className="fixed bottom-5 right-5 z-40 grid size-14 place-items-center rounded-full bg-navy-900 text-white shadow-lift transition hover:scale-105">
-        {!open && <span className="absolute inset-0 rounded-full bg-teal-500/40 animate-pulse-ring" />}
-        {open ? <X className="relative size-6" /> : <MessagesSquare className="relative size-6 text-teal-300" />}
+        {!open && !unread && <span className="absolute inset-0 rounded-full bg-teal-500/40 animate-pulse-ring" />}
+        {open ? <ChevronDown className="relative size-6" /> : <MessagesSquare className="relative size-6 text-teal-300" />}
+        {!open && unread > 0 && <span className="absolute -right-1 -top-1 grid min-w-6 place-items-center rounded-full bg-danger px-1.5 text-xs font-bold text-white ring-2 ring-white">{unread}</span>}
       </button>
       <AnimatePresence>
         {open && (
           <motion.div role="dialog" aria-label={t("title")} initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16 }}
-            className="fixed bottom-24 right-4 z-40 flex h-[min(600px,calc(100vh-8rem))] w-[calc(100%-2rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-lift">
+            className="fixed inset-x-2 bottom-2 top-2 z-[60] flex flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-lift sm:inset-x-auto sm:bottom-24 sm:right-4 sm:top-auto sm:h-[min(620px,calc(100vh-8rem))] sm:w-[25rem]"
+            onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); pick(e.dataTransfer.files?.[0]); }}>
             <div className="bg-hero px-5 pb-4 pt-4 text-white">
               <div className="flex items-center gap-3">
                 <div className="relative grid size-10 place-items-center rounded-2xl bg-white/10"><Headset className="size-5 text-teal-300" />
@@ -140,53 +245,64 @@ export function AssistantWidget() {
                   <div className="font-display text-[15px] font-bold text-white">{t("title")}</div>
                   <div className="text-[11px] text-white/65">{online ? t("online") : t("offline")}</div>
                 </div>
-                {started && <button onClick={() => setMsgs([])} className="rounded-lg px-2 py-1 text-[11px] font-semibold text-white/70 hover:bg-white/10 hover:text-white">{t("restart")}</button>}
                 <button type="button" onClick={() => setOpen(false)} aria-label={t("close")} title={t("close")}
                   className="grid size-8 shrink-0 place-items-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white"><X className="size-5" /></button>
               </div>
               <div className="mt-3 flex gap-2 [&>*]:flex-1">
-                {site?.socials?.telegram && <Quick href={site.socials.telegram} icon={<Send className="size-4" />} label="Telegram" external />}
-                {tel && <Quick href={`tel:${tel}`} icon={<Phone className="size-4" />} label={t("call")} external />}
-                {isPatient
-                  ? <Quick href="/dashboard/support" icon={<MessagesSquare className="size-4" />} label={t("operator")} onClick={() => setOpen(false)} />
-                  : <button type="button" onClick={() => say({ kind: "text", role: "assistant", content: t("handoffIntro") }, { kind: "handoff", question: "" })}
-                      className="flex flex-col items-center gap-1 rounded-xl bg-white/10 py-2 text-[11px] font-semibold text-white transition hover:bg-white/20"><MessagesSquare className="size-4" />{t("operator")}</button>}
+                {site?.socials?.telegram && <Quick href={site.socials.telegram} icon={<Send className="size-4" />} label="Telegram" />}
+                {tel && <Quick href={`tel:${tel}`} icon={<Phone className="size-4" />} label={t("call")} />}
+                <ConsultButton source="assistant_widget" label={t("consult")} icon
+                  className="!h-auto flex-col !gap-1 !rounded-xl !bg-white/10 !px-0 !py-2 !text-[11px] !font-semibold !text-white !shadow-none hover:!bg-white/20" />
               </div>
             </div>
-            <div ref={box} className="scrollbar-thin flex-1 space-y-3 overflow-y-auto bg-mist p-4">
-              <Bubble role="assistant">{t("greeting")}</Bubble>
-              {!started && faqs.length > 0 && (
+            <div ref={box} className="scrollbar-thin flex-1 space-y-2.5 overflow-y-auto bg-mist p-4">
+              <Bubble staff>{t("greeting")}</Bubble>
+              {!msgs.length && faqs.length > 0 && (
                 <div>
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{t("popular")}</div>
                   <div className="flex flex-col items-start gap-1.5">
-                    {faqs.slice(0, 6).map((f) => (
-                      <button key={f.id} type="button" onClick={() => void ask(f.question)}
+                    {faqs.filter((f) => !shownFaq.includes(f)).slice(0, 5).map((f) => (
+                      <button key={f.id} type="button" onClick={() => setShownFaq((x) => [...x, f])}
                         className="rounded-2xl border border-teal-200 bg-white px-3 py-1.5 text-left text-[13px] font-medium text-teal-800 transition hover:border-teal-400 hover:bg-teal-50">{f.question}</button>
                     ))}
                   </div>
                 </div>
               )}
-              {msgs.map((m, i) => m.kind === "text" ? <Bubble key={i} role={m.role}>{m.content}</Bubble>
-                : m.kind === "handoff" ? <Handoff key={i} question={m.question} onDone={(ref) => say({ kind: "done", reference: ref })} />
-                : <Bubble key={i} role="assistant"><span className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-green-600" />{t("sent", { ref: m.reference })}</span></Bubble>)}
-              {busy && <Bubble role="assistant"><span className="inline-flex gap-1"><Dot /><Dot d={0.15} /><Dot d={0.3} /></span></Bubble>}
-              {started && !busy && lastIsAnswer(msgs) && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <button type="button" onClick={() => say({ kind: "handoff", question: lastUser(msgs) })}
-                    className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-navy-900 hover:border-teal-300">{t("notHelpful")}</button>
-                  {isPatient && <Link href="/dashboard/support" onClick={() => setOpen(false)} className="rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold text-navy-900 hover:border-teal-300">{t("operator")}</Link>}
-                </div>
-              )}
+              {shownFaq.map((f) => (
+                <div key={f.id} className="space-y-2.5"><Bubble>{f.question}</Bubble><Bubble staff>{f.answer}</Bubble></div>
+              ))}
+              {hasChat && !loaded && <div className="grid place-items-center py-4"><Loader2 className="size-5 animate-spin text-teal-600" /></div>}
+              {msgs.map((m) => (
+                <Bubble key={m.id} staff={m.from_staff} author={m.from_staff ? (m.author_name || t("operatorName")) : undefined}
+                  time={hhmm(m.created_at)} read={!m.from_staff && !!m.read_at}>
+                  {m.attachment && <AttachmentView a={m.attachment} own={!m.from_staff} />}
+                  {m.text}
+                </Bubble>
+              ))}
+              {waiting && <p className="px-1 text-center text-[11px] text-ink-muted">{online ? t("waiting") : t("offlineNote")}</p>}
+              {askContact && !isPatient && token && <ContactCard token={token} onClose={() => { store.set(CONTACT_KEY, "1"); setAskContact(false); }} />}
             </div>
-            <form onSubmit={submit} className="flex items-center gap-2 border-t border-line p-3">
-              <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t("placeholder")} maxLength={2000} aria-label={t("placeholder")}
-                className="h-11 flex-1 rounded-xl bg-mist px-3.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30" />
-              <button type="submit" disabled={busy || !input.trim()} aria-label={t("send")}
-                className="grid size-11 place-items-center rounded-xl bg-teal-500 text-white transition hover:bg-teal-600 disabled:opacity-40"><Send className="size-4" /></button>
+            {file && (
+              <div className="flex items-center gap-3 border-t border-line bg-mist/60 px-3 py-2">
+                {preview ? <img src={preview} alt="" className="size-11 rounded-lg object-cover" /> : <span className="grid size-11 place-items-center rounded-lg bg-white text-teal-600"><FileText className="size-5" /></span>}
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-navy-900">{file.name}</span><span className="text-[11px] text-ink-muted">{fileSize(file.size)}</span></span>
+                <button type="button" onClick={() => setFile(null)} aria-label={tc("removeFile")} className="grid size-8 place-items-center rounded-lg text-ink-muted hover:bg-white hover:text-danger"><X className="size-4" /></button>
+              </div>
+            )}
+            <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex items-end gap-2 border-t border-line p-3">
+              <button type="button" onClick={() => picker.current?.click()} aria-label={t("attach")} title={t("attach")}
+                className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-soft transition hover:bg-mist hover:text-teal-600"><Paperclip className="size-5" /></button>
+              <input ref={picker} type="file" className="sr-only" accept=".pdf,.jpg,.jpeg,.png,.webp,.dcm,.doc,.docx,.txt,.zip,image/*" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+              <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} rows={1} maxLength={4000} placeholder={t("placeholder")} aria-label={t("placeholder")}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+                onPaste={(e) => { const f = Array.from(e.clipboardData.files || [])[0]; if (f) { e.preventDefault(); pick(f); } }}
+                className="max-h-32 min-h-11 flex-1 resize-none rounded-xl bg-mist px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30" />
+              <button type="submit" disabled={busy || (!input.trim() && !file)} aria-label={t("send")}
+                className="grid size-11 shrink-0 place-items-center rounded-xl bg-teal-500 text-white transition hover:bg-teal-600 disabled:opacity-40">
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              </button>
             </form>
-            <div className="border-t border-line bg-white px-4 py-1.5 text-center text-[10px] text-ink-muted">
-              {ai ? <span className="inline-flex items-center gap-1"><Sparkles className="size-3" />{t("disclaimer")}</span> : t("notDoctor")}
-            </div>
+            <div className="border-t border-line bg-white px-4 py-1.5 text-center text-[10px] text-ink-muted">{t("notDoctor")}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -194,72 +310,70 @@ export function AssistantWidget() {
   );
 }
 
-function lastIsAnswer(msgs: Msg[]) {
-  const m = msgs[msgs.length - 1];
-  return m?.kind === "text" && m.role === "assistant";
+function Quick({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+  return (
+    <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer"
+      className="flex flex-col items-center gap-1 rounded-xl bg-white/10 py-2 text-[11px] font-semibold text-white transition hover:bg-white/20">{icon}{label}</a>
+  );
 }
 
-function lastUser(msgs: Msg[]) {
-  for (let i = msgs.length - 1; i >= 0; i--) { const m = msgs[i]; if (m.kind === "text" && m.role === "user") return m.content; }
-  return "";
-}
-
-function Quick({ href, icon, label, external, onClick }: { href: string; icon: React.ReactNode; label: string; external?: boolean; onClick?: () => void }) {
-  const cls = "flex flex-col items-center gap-1 rounded-xl bg-white/10 py-2 text-[11px] font-semibold text-white transition hover:bg-white/20";
-  return external
-    ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer" className={cls}>{icon}{label}</a>
-    : <Link href={href} onClick={onClick} className={cls}>{icon}{label}</Link>;
-}
-
-/** Inline "send this to a coordinator" form: name + phone (+ the question). Creates a CRM request. */
-function Handoff({ question, onDone }: { question: string; onDone: (reference: string) => void }) {
+/** Optional "leave your name and phone" card after the first message. Saved on the chat, not as a lead. */
+function ContactCard({ token, onClose }: { token: string; onClose: () => void }) {
   const t = useTranslations("assistant");
   const { user } = useAuth();
   const [name, setName] = useState(user?.full_name || "");
   const [phone, setPhone] = useState(user?.phone || "+998 ");
-  const [text, setText] = useState(question);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [sent, setSent] = useState(false);
-  if (sent) return null;
-  const send = async (e: React.FormEvent) => {
+  const [done, setDone] = useState(false);
+  if (done) return <Bubble staff><span className="flex items-start gap-2"><Check className="mt-0.5 size-4 shrink-0 text-green-600" />{t("contactSaved")}</span></Bubble>;
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    setErr("");
     try {
-      const r = await api<{ reference: string }>("/forms/consultation/", {
-        auth: false,
-        body: { full_name: name, phone, message: text, consent: true, source: "assistant_widget",
-          source_detail: typeof window !== "undefined" ? window.location.pathname : "" },
-      });
-      setSent(true);
-      onDone(r.reference);
+      await api("/live-chat/contact/", { auth: false, body: { token, name, phone } });
+      setDone(true);
+      setTimeout(onClose, 2500);
     } catch (e2) {
-      setErr(e2 instanceof ApiError ? (Object.values(e2.fieldErrors())[0] || e2.message) : t("error"));
+      toast.error(e2 instanceof ApiError ? (Object.values(e2.fieldErrors())[0] || e2.message) : t("error"));
     } finally { setBusy(false); }
   };
   const field = "h-10 w-full rounded-xl border border-line bg-white px-3 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20";
   return (
-    <form onSubmit={send} className="space-y-2 rounded-2xl border border-teal-200 bg-white p-3 shadow-card">
-      <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("yourName")} autoComplete="name" required minLength={2} />
-      <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998" type="tel" autoComplete="tel" required />
-      <textarea className={cn(field, "h-auto min-h-16 py-2")} value={text} onChange={(e) => setText(e.target.value)} placeholder={t("yourQuestion")} rows={2} maxLength={2000} />
-      <p className="text-[10px] leading-snug text-ink-muted">{t("consentNote")} <Link href="/p/privacy-policy" target="_blank" className="underline">{t("privacy")}</Link></p>
-      {err && <p className="text-xs text-danger">{err}</p>}
-      <button type="submit" disabled={busy || name.trim().length < 2 || phone.replace(/\D/g, "").length < 9}
-        className="h-10 w-full rounded-xl bg-teal-500 text-sm font-semibold text-white transition hover:bg-teal-600 disabled:opacity-40">{busy ? "…" : t("sendToOperator")}</button>
+    <form onSubmit={save} className="space-y-2 rounded-2xl border border-teal-200 bg-white p-3 shadow-card">
+      <p className="text-[12px] leading-snug text-ink-soft">{t("contactTitle")}</p>
+      <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("yourName")} autoComplete="name" />
+      <input className={field} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998" type="tel" autoComplete="tel" />
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy || (name.trim().length < 2 && phone.replace(/\D/g, "").length < 9)}
+          className="h-9 flex-1 rounded-xl bg-teal-500 text-sm font-semibold text-white transition hover:bg-teal-600 disabled:opacity-40">{busy ? "…" : t("contactSave")}</button>
+        <button type="button" onClick={onClose} className="h-9 rounded-xl px-3 text-sm font-semibold text-ink-muted hover:bg-mist">{t("contactSkip")}</button>
+      </div>
     </form>
   );
 }
 
-function Bubble({ role, children }: { role: "user" | "assistant"; children: React.ReactNode }) {
+function AttachmentView({ a, own }: { a: Attachment; own: boolean }) {
+  if (!a.url) return null;
+  const inline = `${a.url}${a.url.includes("?") ? "&" : "?"}inline=1`;
+  if (a.is_image) {
+    return <a href={inline} target="_blank" rel="noopener noreferrer" className="mb-1 block overflow-hidden rounded-xl"><img src={inline} alt={a.name} className="max-h-56 w-full object-cover" loading="lazy" /></a>;
+  }
   return (
-    <div className={cn("max-w-[88%] whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-      role === "user" ? "ml-auto rounded-br-md bg-navy-900 text-white" : "rounded-bl-md bg-white text-ink shadow-card")}>
-      {children}
-    </div>
+    <a href={a.url} className={cn("mb-1 flex items-center gap-2.5 rounded-xl px-2.5 py-2 transition", own ? "bg-white/15 hover:bg-white/25" : "bg-mist hover:bg-teal-50")}>
+      <FileText className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold">{a.name}</span><span className={cn("block text-[10px]", own ? "text-white/70" : "text-ink-muted")}>{fileSize(a.size)}</span></span>
+      <Download className="size-4 shrink-0 opacity-70" />
+    </a>
   );
 }
-function Dot({ d = 0 }: { d?: number }) {
-  return <motion.span className="size-1.5 rounded-full bg-ink-muted" animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: d }} />;
+
+function Bubble({ staff, author, time, read, children }: { staff?: boolean; author?: string; time?: string; read?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={cn("max-w-[85%] whitespace-pre-line break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+      staff ? "rounded-bl-md bg-white text-ink shadow-card" : "ml-auto rounded-br-md bg-navy-900 text-white")}>
+      {author && <div className="mb-0.5 text-[11px] font-bold text-teal-700">{author}</div>}
+      {children}
+      {time && <div className={cn("mt-1 flex items-center justify-end gap-1 text-[10px]", staff ? "text-ink-muted" : "text-white/60")}>{time}{read && <CheckCheck className="size-3" />}</div>}
+    </div>
+  );
 }

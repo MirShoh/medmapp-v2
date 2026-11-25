@@ -10,6 +10,7 @@ from cases import portal_api as portal
 from catalog import public_api as pub
 from crm import admin_api as crm
 from crm import chat_api as chat
+from crm import live_chat_api as live
 from crm import public_api as forms
 from finance import api as fin
 from notifications import api as notif
@@ -103,6 +104,9 @@ urlpatterns = [
     path("me/overview/", portal.MeOverview.as_view()),
     path("me/counters/", notif.CountersView.as_view()),
     path("me/chat/", chat.MyChatView.as_view()),
+    path("live-chat/", live.LiveChatView.as_view()),
+    path("live-chat/contact/", live.LiveChatContactView.as_view()),
+    path("live-chat/files/<int:message_id>/", live.LiveChatFileView.as_view()),
     path("me/chat/unread/", chat.MyChatUnreadView.as_view()),
     path("me/profile/", portal.MeProfile.as_view()),
     path("me/consents/", portal.MeConsents.as_view()),
@@ -119,6 +123,8 @@ urlpatterns = [
     path("admin/content-overview/", ContentOverviewView.as_view()),
     path("admin/chats/", chat.ChatListView.as_view()),
     path("admin/chats/<int:patient_id>/", chat.ChatThreadView.as_view()),
+    path("admin/visitor-chats/", live.VisitorChatListView.as_view()),
+    path("admin/visitor-chats/<int:chat_id>/", live.VisitorChatThreadView.as_view()),
     path("admin/staff/", acc.StaffDirectoryView.as_view()),
     path("admin/integrations/", notif.IntegrationsView.as_view()),
     path("admin/integrations/<str:key>/test/", notif.TestIntegrationView.as_view()),

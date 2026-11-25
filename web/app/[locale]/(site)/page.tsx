@@ -62,12 +62,12 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     <>
       <JsonLd data={faqLd(data?.faqs || [])} />
       {/* 1. HERO + STATS */}
-      <section className="bg-hero relative flex flex-col overflow-x-clip pb-8 pt-24 text-white lg:min-h-[100svh] lg:pb-10 lg:pt-28">
+      <section className="bg-hero relative flex flex-col overflow-x-clip pb-8 pt-24 text-white lg:min-h-[100svh] lg:pb-6 lg:pt-28">
         <div className="bg-grid pointer-events-none absolute inset-0" />
         <div className={`container-x relative grid w-full items-center gap-10 ${statItems.length ? "mt-auto" : "my-auto"} lg:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)] xl:gap-14`}>
           <div>
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-teal-200 backdrop-blur">
-              <span className="size-1.5 rounded-full bg-green-400" /> MedMapp · {t("ui.heroBadge")}
+              <span className="size-1.5 rounded-full bg-green-400" /> {t("ui.heroBadge")}
             </div>
             <h1 className="font-display text-4xl font-extrabold leading-[1.05] text-white sm:text-5xl lg:text-[64px]">
               {S.hero?.title || t("home.heroTitle")}
@@ -82,15 +82,10 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                 labels={Object.fromEntries(MAP_KEYS.map((k) => [k, t(`map.${k}`)]))} />
             </div>
           </div>
-          <ul className="flex flex-col gap-x-10 gap-y-2 text-sm text-white/75 sm:flex-row sm:flex-wrap sm:justify-center lg:col-span-2 xl:flex-nowrap">
-            {[t("home.trust1"), t("home.trust2"), t("home.trust3"), t("home.trust4")].map((x) => (
-              <li key={x} className="flex items-center gap-2 xl:whitespace-nowrap"><ShieldCheck className="size-4 shrink-0 text-green-400" />{x}</li>
-            ))}
-          </ul>
         </div>
         {/* stats (real counts only), at the bottom of the first screen */}
         {statItems.length > 0 && (
-          <div className="container-x relative z-10 mb-auto mt-10">
+          <div className="container-x relative z-10 mt-12 lg:mt-auto lg:pt-10">
             <div className="rounded-3xl border border-line bg-white p-3 shadow-lift sm:p-4">
               <div className={`grid gap-3 sm:grid-cols-2 ${statItems.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"} ${statItems.length === 5 ? "xl:grid-cols-5" : ""}`}>
                 {statItems.map(([k, label, hint]) => {
@@ -111,6 +106,14 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             </div>
           </div>
         )}
+        {/* trust points under the stats */}
+        <div className="container-x relative mt-6">
+          <ul className="flex flex-col gap-x-10 gap-y-2 text-sm text-white/75 sm:flex-row sm:flex-wrap sm:justify-center xl:flex-nowrap">
+            {[t("home.trust1"), t("home.trust2"), t("home.trust3"), t("home.trust4")].map((x) => (
+              <li key={x} className="flex items-center gap-2 xl:whitespace-nowrap"><ShieldCheck className="size-4 shrink-0 text-green-400" />{x}</li>
+            ))}
+          </ul>
+        </div>
       </section>
 
       {/* 5. DESTINATIONS */}

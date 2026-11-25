@@ -3,6 +3,7 @@
 import { ArrowRight, Building2, LayoutGrid, Search, Sparkles, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "@/i18n/navigation";
+import { mediaUrl } from "@/lib/media";
 import type { Specialty, Treatment } from "@/lib/types";
 import { cn, money } from "@/lib/utils";
 import { ConsultButton } from "./hero-actions";
@@ -85,7 +86,12 @@ export function TreatmentExplorer({ specialties, treatments, locale, labels, pag
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {shown.map((x) => (
               <Link key={x.id} href={`/treatments/${x.slug}`}
-                className="group flex flex-col rounded-2xl border border-line bg-white p-5 transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-lift">
+                className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-white p-5 transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-lift">
+                {x.image && (
+                  <div className="-mx-5 -mt-5 mb-4 aspect-[16/9] overflow-hidden bg-navy-800">
+                    <img src={mediaUrl(x.image)!} alt={x.name} className="size-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
+                  </div>
+                )}
                 <div className="flex items-start gap-3">
                   <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-600 transition group-hover:bg-teal-500 group-hover:text-white"><Icon name={x.specialty.icon} className="size-5" /></span>
                   <div className="min-w-0">

@@ -963,3 +963,114 @@ class BadgesAndChatFilesTests(Base):
         today = fin.get("/api/v2/admin/dashboard/").data["today"]
         self.assertNotIn("unassigned_cases", today)
         self.assertIn("payments_pending", today)
+
+
+class ImageOptimisationTests(Base):
+    def test_large_upload_is_resized_to_webp(self):
+        import io
+
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (4000, 2500), (20, 120, 230)).save(buf, "JPEG", quality=95)
+        self.h1.image = SimpleUploadedFile("big.jpg", buf.getvalue(), content_type="image/jpeg")
+        self.h1.save()
+        self.h1.refresh_from_db()
+        self.assertTrue(self.h1.image.name.endswith(".webp"))
+        with Image.open(self.h1.image.path) as im:
+            self.assertEqual(max(im.size), 1920)
+        # saving again without a new upload must not touch the stored file
+        name = self.h1.image.name
+        self.h1.save()
+        self.assertEqual(self.h1.image.name, name)
+
+
+class SearchTests(Base):
+    def test_search_ignores_accents_and_apostrophes(self):
+        from config.search import fold
+
+        self.assertEqual(fold("Acıbadem Şişli O‘zbekiston"), "acibadem sisli ozbekiston")
+        Hospital.objects.create(name="Acıbadem Şişli", slug="acibadem-sisli", city=self.ist)
+        c = APIClient()
+        for q in ("acibadem", "ACIBADEM sisli", "şişli"):
+            names = [h["name"] for h in c.get("/api/v2/public/search/", {"q": q}).data["hospitals"]]
+            self.assertIn("Acıbadem Şişli", names, q)
+        self.assertEqual(c.get("/api/v2/public/hospitals/", {"search": "acibadem"}).data["count"], 1)
+
+    def test_live_search_ranks_and_counts(self):
+        c = APIClient()
+        d = c.get("/api/v2/public/search/", {"q": "alpha"}).data
+        self.assertEqual(d["hospitals"][0]["slug"], "alpha-heart")
+        self.assertEqual(d["hospitals_total"], 1)
+        self.assertEqual(c.get("/api/v2/public/search/", {"q": "a"}).data["hospitals"], [])
+
+    def test_hospital_detail_has_trip_info_and_similar(self):
+        Hospital.objects.create(name="Gamma Clinic", slug="gamma", city=self.ist).specialties.add(self.cardio)
+        d = APIClient().get("/api/v2/public/hospitals/alpha-heart/").data
+        self.assertEqual(d["country"]["slug"], "turkey")
+        self.assertEqual([h["slug"] for h in d["similar"]], ["gamma"])
+        self.assertIn(str(self.cabg.id), d["country_prices"])
+
+
+class LiveChatTests(Base):
+    def test_visitor_chat_round_trip_without_lead(self):
+        anon = APIClient()
+        r = anon.post("/api/v2/live-chat/", {"text": "Salom, narx qancha?", "page": "/hospitals/x", "language": "ru"}, format="json")
+        self.assertEqual(r.status_code, 201)
+        token, chat_id = r.data["token"], r.data["chat"]["id"]
+        self.assertEqual(Lead.objects.count(), 0)  # chats never become leads
+        # staff see it as unread, reply, visitor reads the reply
+        staff = self.client_for(self.user("sales_manager"))
+        self.assertEqual(staff.get("/api/v2/me/counters/").data["chats"], 1)
+        rows = staff.get("/api/v2/admin/visitor-chats/").data
+        self.assertEqual((rows[0]["visitor"], rows[0]["unread"]), (chat_id, 1))
+        self.assertEqual(staff.post(f"/api/v2/admin/visitor-chats/{chat_id}/", {"text": "Assalomu alaykum!"}, format="json").status_code, 201)
+        msgs = anon.get("/api/v2/live-chat/", {"token": token}).data["messages"]
+        self.assertEqual([m["from_staff"] for m in msgs], [False, True])
+        self.assertEqual(staff.get("/api/v2/me/counters/").data["chats"], 0)
+        # optional contact details
+        self.assertEqual(anon.post("/api/v2/live-chat/contact/", {"token": token, "name": "Ali", "phone": "+998 90 123 45 67"}, format="json").data["phone"], "+998901234567")
+        self.assertEqual(Lead.objects.count(), 0)
+
+    def test_token_is_required_and_files_are_private(self):
+        anon = APIClient()
+        self.assertEqual(anon.get("/api/v2/live-chat/", {"token": "nope"}).status_code, 404)
+        r = anon.post("/api/v2/live-chat/", {"text": "", "file": pdf()}, format="multipart")
+        self.assertEqual(r.status_code, 201)
+        url = r.data["message"]["attachment"]["url"]
+        self.assertEqual(anon.get(url).status_code, 200)
+        self.assertEqual(anon.get(url.split("?")[0] + "?token=wrong").status_code, 404)
+        # staff get a signed link of their own
+        staff = self.client_for(self.user("sales_manager"))
+        thread = staff.get(f"/api/v2/admin/visitor-chats/{r.data['chat']['id']}/").data
+        self.assertTrue(thread["messages"][0]["attachment"]["url"].startswith("/api/v2/files/"))
+        self.assertEqual(staff.get(thread["messages"][0]["attachment"]["url"]).status_code, 200)
+        # someone without CRM access cannot read visitor chats
+        self.assertEqual(self.client_for(self.user("patient", email="p2@t.local")).get("/api/v2/admin/visitor-chats/").status_code, 403)
+
+
+class WalkInPatientTests(Base):
+    def test_staff_create_patient_and_open_cabinet(self):
+        staff = self.client_for(self.user("sales_manager"))
+        r = staff.post("/api/v2/admin/patients/", {"full_name": "Ofis Bemor", "phone": "+998 90 777 66 55"}, format="json")
+        self.assertEqual(r.status_code, 201)
+        pid = r.data["id"]
+        # duplicate check by phone (any formatting)
+        dup = staff.get("/api/v2/admin/patients/duplicates/", {"phone": "90 777-66-55"}).data
+        self.assertEqual([d["id"] for d in dup], [pid])
+        # consent is required
+        self.assertEqual(staff.post(f"/api/v2/admin/patients/{pid}/open_cabinet/", {}, format="json").status_code, 400)
+        r = staff.post(f"/api/v2/admin/patients/{pid}/open_cabinet/", {"consent": True}, format="json")
+        self.assertEqual((r.status_code, r.data["login_phone"]), (201, "+998907776655"))
+        p = Patient.objects.get(pk=pid)
+        self.assertTrue(p.user and not p.user.has_usable_password())
+        self.assertEqual(p.user.account.role, "patient")
+        self.assertTrue(ConsentRecord.objects.filter(patient=p, scope="data_processing").exists())
+        self.assertEqual(Lead.objects.count(), 0)
+        # second time: already has a cabinet
+        self.assertEqual(staff.post(f"/api/v2/admin/patients/{pid}/open_cabinet/", {"consent": True}, format="json").status_code, 409)
+
+    def test_open_cabinet_needs_patient_edit_permission(self):
+        p = Patient.objects.create(full_name="X", phone="+998901112233")
+        viewer = self.client_for(self.user("finance_manager", email="fm2@t.local"))
+        self.assertIn(viewer.post(f"/api/v2/admin/patients/{p.pk}/open_cabinet/", {"consent": True}, format="json").status_code, (403, 404))

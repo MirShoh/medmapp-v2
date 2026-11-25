@@ -5,8 +5,8 @@ import { Suspense } from "react";
 import { StaffChats } from "@/components/chat";
 
 function Chats() {
-  const p = Number(useSearchParams().get("patient")) || undefined;
-  return <StaffChats initial={p} />;
+  const sp = useSearchParams();
+  return <StaffChats initial={Number(sp.get("patient")) || undefined} initialVisitor={Number(sp.get("visitor")) || undefined} />;
 }
 
 export default function Page() {
