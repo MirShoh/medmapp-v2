@@ -1107,3 +1107,27 @@ class InternalTokenThrottleTests(Base):
         self.assertIn(False, allowed(HTTP_X_INTERNAL_TOKEN="wrong"))  # a guessed token does not help
         with self.settings(INTERNAL_API_TOKEN=""):
             self.assertIn(False, allowed(HTTP_X_INTERNAL_TOKEN=""))  # no token configured: nothing is exempt
+
+
+class CatalogTransferTests(Base):
+    def test_export_has_catalogue_but_no_people(self):
+        import json
+        import os
+        import zipfile
+
+        from django.core.management import call_command
+
+        Patient.objects.create(full_name="Secret Person", phone="+998900000000")
+        out = os.path.join(TMP, "cat.zip")
+        call_command("export_catalog", out, stdout=open(os.devnull, "w"))
+        with zipfile.ZipFile(out) as z:
+            rows = json.loads(z.read("catalog.json"))
+        models = {r["model"] for r in rows}
+        self.assertIn("clinics.hospital", models)
+        self.assertFalse({m for m in models if m.split(".")[0] in ("crm", "accounts", "cases", "auth", "finance")})
+        self.assertNotIn("Secret Person", json.dumps(rows))
+        # importing into a database that already has a catalogue is refused
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("import_catalog", out, stdout=open(os.devnull, "w"))

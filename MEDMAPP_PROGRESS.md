@@ -334,3 +334,14 @@ Last updated: 2026-11-23 (audit round 2)
 - Public pages ship only public message namespaces (i18n/client-messages.ts); portal layouts add the full set.
 - Production: gunicorn gthread (workers × threads, max-requests), nginx keep-alive + 60 s page micro-cache with a
   gzip copy (deploy/nginx.conf), `tools/loadtest.py` for re-measuring on the VPS.
+
+## 2026-11-25 — VPS deployment kit (docs/VPS_DEPLOY.md)
+- `deploy/server-setup.sh` (fresh Ubuntu: Docker, ufw 22/80/443, fail2ban, unattended upgrades, swap, Tashkent TZ,
+  read-only GitHub deploy key), `deploy/deploy.sh` (first install: generates secrets into .env files, Let's Encrypt
+  certificate, build, optional catalogue import, cron for backup 02:00 and certificate renewal 03:30; later runs:
+  git pull + rebuild), `deploy/renew-cert.sh` (webroot renewal + nginx reload).
+- `manage.py export_catalog` / `import_catalog`: one zip with the public catalogue + photos (no users, patients,
+  leads, chats, documents). Tested: fresh DB import matches every table count.
+- Production fixes found while preparing: Next.js server calls now send X-Forwarded-Proto (Django's SSL redirect
+  answered 301 to an unreachable https://backend URL), ALLOWED_HOSTS includes `backend`, backup tar runs as root,
+  nginx ACME location + `http2 on`.

@@ -1,8 +1,16 @@
 import "server-only";
 
-/** Headers for server-side API calls: the shared token lifts the anonymous rate limit for this server (see the
- *  backend's config/throttling.py). Never sent from the browser. */
-export const INTERNAL_HEADERS: Record<string, string> = process.env.INTERNAL_API_TOKEN ? { "X-Internal-Token": process.env.INTERNAL_API_TOKEN } : {};
+/**
+ * Headers for server-side API calls (never sent from the browser):
+ * - X-Internal-Token: the shared token lifts the anonymous rate limit for this server (backend config/throttling.py).
+ * - X-Forwarded-Proto: these calls go straight to the API container over plain HTTP inside the server; without it
+ *   Django (DEBUG off, SECURE_SSL_REDIRECT) answers 301 to an https:// address that does not exist internally.
+ *   Visitors still reach the API only through nginx, which serves HTTPS.
+ */
+export const INTERNAL_HEADERS: Record<string, string> = {
+  "X-Forwarded-Proto": "https",
+  ...(process.env.INTERNAL_API_TOKEN ? { "X-Internal-Token": process.env.INTERNAL_API_TOKEN } : {}),
+};
 
 // Django API address. On a host without a local backend (e.g. Netlify before BACKEND_URL is set) there is no
 // fallback: pages render without catalogue data instead of waiting on retries for an address that cannot answer.

@@ -45,3 +45,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# deploy: Let's Encrypt challenge files and catalogue archives
+deploy/acme/
+*.zip
