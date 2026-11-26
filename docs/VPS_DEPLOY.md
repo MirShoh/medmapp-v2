@@ -1,6 +1,9 @@
 # MedMapp'ni VPS'ga joylash — qadamma-qadam
 
 Taxminan 1 soat. Kerak bo'ladi: VPS, `medmapp.uz` domeni boshqaruvi, GitHub akkaunti, shu kompyuter.
+
+**Tartib:** avval **test.medmapp.uz** da ishga tushiramiz — parol bilan yopiq, Google'da ko'rinmaydi. Hammasi
+tekshirilgach, bitta buyruq bilan **medmapp.uz** ga o'tkazamiz (10-bo'lim).
 Barcha buyruqlar tayyor; `<...>` o'rniga o'z qiymatingizni yozasiz.
 
 ## 1. VPS tanlash
@@ -22,15 +25,16 @@ Buyurtmada **Ubuntu 24.04** ni tanlang. Sizga IP manzil va root paroli (yoki SSH
 
 Domen ro'yxatdan o'tgan panelda (registrator) DNS yozuvlarini qo'shing:
 
+Hozircha faqat test subdomeni (asosiy `medmapp.uz` ga tegmaymiz):
+
 | Turi | Nom | Qiymat |
 |---|---|---|
-| A | `@` (medmapp.uz) | `<SERVER_IP>` |
-| A | `www` | `<SERVER_IP>` |
+| A | `test` (test.medmapp.uz) | `<SERVER_IP>` |
 
-Tekshirish (bir necha daqiqadan bir necha soatgacha yangilanadi) — ikkalasi ham server IP'sini ko'rsatishi kerak:
+Tekshirish (bir necha daqiqadan bir necha soatgacha yangilanadi) — server IP'sini ko'rsatishi kerak:
 
 ```powershell
-nslookup medmapp.uz
+nslookup test.medmapp.uz
 ```
 
 ## 3. Serverni tayyorlash (bir marta)
@@ -78,10 +82,13 @@ cd /opt/medmapp
 bash deploy/deploy.sh --import /root/medmapp-catalog.zip
 ```
 
-Skript domen (Enter = `medmapp.uz`) va e-mail so'raydi, keyin o'zi:
+Skript so'raydi: domen (Enter = `test.medmapp.uz`), "test saytmi?" (Enter = ha) va e-mail. Keyin o'zi:
 maxfiy kalitlarni yaratadi (`.env`, `backend/.env`), bepul SSL sertifikat oladi, hammasini quradi va ishga
 tushiradi, katalogni import qiladi, har kecha zaxira nusxa (02:00) va sertifikat yangilanishini (03:30) yoqadi.
 Birinchi marta 5–10 daqiqa davom etadi.
+
+**Test sayt paroli** ekranga bir marta chiqadi (login `medmapp`) — yozib oling. Sayt ochilganda brauzer shu
+login/parolni so'raydi. Yangi parol: `bash deploy/deploy.sh --domain test.medmapp.uz --test`.
 
 Birinchi administratorni yarating:
 
@@ -91,12 +98,13 @@ docker compose exec backend python manage.py createsuperuser
 
 ## 6. Tekshirish
 
-- `https://medmapp.uz` — sayt, rasmlar, til almashtirish.
-- `https://medmapp.uz/admin/login` — yaratilgan admin bilan kirish.
+- `https://test.medmapp.uz` — parol so'raydi, keyin sayt, rasmlar, til almashtirish.
+- `https://test.medmapp.uz/admin/login` — yaratilgan admin bilan kirish.
+- Live chat, konsultatsiya formasi, bemor kabineti, ofisga kelgan bemor qo'shish — barchasini sinab ko'ring.
 - Kesh ishlayaptimi (ikkinchi so'rovda `X-Page-Cache: HIT`):
 
 ```bash
-curl -sI https://medmapp.uz/hospitals | grep -i x-page-cache; curl -sI https://medmapp.uz/hospitals | grep -i x-page-cache
+curl -sI -u medmapp:<PAROL> https://test.medmapp.uz/hospitals | grep -iE "x-page-cache|x-robots"; curl -sI -u medmapp:<PAROL> https://test.medmapp.uz/hospitals | grep -i x-page-cache
 ```
 
 ## 7. Integratsiyalar (keyinroq, kerak bo'lganda)
@@ -127,7 +135,29 @@ saqlanadi. **Muhim:** ularni muntazam serverdan tashqariga (boshqa joyga, shifrl
 
 Qo'lda zaxira: `bash deploy/backup.sh`. Tiklash buyruqlari `deploy/backup.sh` faylining oxirida.
 
-## 10. Muammo bo'lsa
+## 10. Asosiy domenga o'tish (test tugagach)
+
+1. DNS'da asosiy domen yozuvlarini serverga yo'naltiring va yangilanishini kuting (`nslookup medmapp.uz`):
+
+| Turi | Nom | Qiymat |
+|---|---|---|
+| A | `@` (medmapp.uz) | `<SERVER_IP>` |
+| A | `www` | `<SERVER_IP>` |
+
+2. Test paytida kiritilgan sinov ma'lumotlarini (sinov lidlari, bemorlar, chatlar) admin panelda o'chiring.
+3. Serverda:
+
+```bash
+cd /opt/medmapp && bash deploy/deploy.sh --domain medmapp.uz
+```
+
+Skript yangi SSL sertifikat oladi, sozlamalarni `medmapp.uz` ga o'tkazadi, **parol va noindex'ni olib tashlaydi**,
+saytni yangi manzil bilan qayta quradi. Baza, rasmlar, adminlar — hammasi saqlanadi. Ishlash uzilishi ~1 daqiqa.
+
+4. `test` DNS yozuvini o'chirib qo'yish mumkin (yoki keyinchalik alohida test server uchun qoldiring).
+5. Google Search Console'ga `https://medmapp.uz` ni qo'shib, `https://medmapp.uz/sitemap.xml` ni yuboring.
+
+## 11. Muammo bo'lsa
 
 ```bash
 cd /opt/medmapp
@@ -140,5 +170,6 @@ docker compose restart backend web   # qayta ishga tushirish
 
 - **SSL olinmadi** — DNS hali server IP'sini ko'rsatmayapti (2-qadam) yoki 80-port yopiq. DNS tayyor bo'lgach
   `bash deploy/deploy.sh` ni qayta ishga tushiring.
+- **Parolni unutdim (test sayt)** — `bash deploy/deploy.sh --domain test.medmapp.uz --test` yangisini chiqaradi.
 - **"set DB_PASSWORD" / "set INTERNAL_API_TOKEN" xatosi** — `/opt/medmapp/.env` fayli yo'q yoki o'chirilgan.
 - Sig'im va yuklama sinovi natijalari: `docs/CAPACITY.md`.

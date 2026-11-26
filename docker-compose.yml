@@ -64,8 +64,13 @@ services:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports: ["80:80", "443:443"]
+    environment:   # filled into deploy/nginx.conf.template (values from .env, see deploy/deploy.sh)
+      SERVER_NAMES: ${SERVER_NAMES:-medmapp.uz www.medmapp.uz}
+      ROBOTS_TAG: ${ROBOTS_TAG:-}
+      AUTH_BASIC: ${AUTH_BASIC:-off}
     volumes:
-      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/htpasswd:/etc/nginx/htpasswd:ro
       - ./deploy/certs:/etc/nginx/certs:ro
       - ./deploy/acme:/var/www/acme:ro
       - media:/srv/media:ro

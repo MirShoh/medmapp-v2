@@ -31,7 +31,7 @@ Ommaviy API javoblari 120 s keshlanadi (Redis): bir xil so'rov ikkinchi marta 0.
 | Oldindan yaratilgan (bosh, klinika, davolash, davlat, blog, shifokor…) | ~150 | 696 sahifa build vaqtida yaratiladi, 60 s da fonda yangilanadi |
 | Filtrli ro'yxatlar (`/hospitals?country=…`) | ~16 | har so'rovda render; serverda nginx 60 s keshlaydi |
 
-**nginx mikro-keshi** (deploy/nginx.conf) bilan har sahifa daqiqasiga bir marta render qilinadi; qolganini nginx
+**nginx mikro-keshi** (deploy/nginx.conf.template) bilan har sahifa daqiqasiga bir marta render qilinadi; qolganini nginx
 tayyor gzip baytlardan beradi (minglab so'rov/s). Shunda chegara — internet kanali:
 o'rtacha sahifa ~45 KB (gzip), kartalardagi rasmlar ~30 KB dona.
 

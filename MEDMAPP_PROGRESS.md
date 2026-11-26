@@ -345,3 +345,10 @@ Last updated: 2026-11-23 (audit round 2)
 - Production fixes found while preparing: Next.js server calls now send X-Forwarded-Proto (Django's SSL redirect
   answered 301 to an unreachable https://backend URL), ALLOWED_HOSTS includes `backend`, backup tar runs as root,
   nginx ACME location + `http2 on`.
+
+## 2026-11-26 — Test domain first (test.medmapp.uz), then the real one
+- nginx config is now a template (deploy/nginx.conf.template, filled by the nginx image from .env):
+  SERVER_NAMES, ROBOTS_TAG ("noindex, nofollow" on a test site), AUTH_BASIC (password via deploy/htpasswd).
+- deploy.sh: first install asks domain (default test.medmapp.uz) and "test site?"; subdomains get no www;
+  test sites get a generated password + noindex. `deploy.sh --domain medmapp.uz [--public|--test]` moves a running
+  site: new certificate, hosts/origins/links updated, web rebuilt for the new URL, password/noindex removed.

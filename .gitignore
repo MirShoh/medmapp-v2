@@ -49,3 +49,4 @@ Thumbs.db
 # deploy: Let's Encrypt challenge files and catalogue archives
 deploy/acme/
 *.zip
+deploy/htpasswd

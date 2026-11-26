@@ -73,7 +73,7 @@ powershell -ExecutionPolicy Bypass -File .\tools-check.ps1   # ruff, migrations,
 **Everything on one server (Docker):** step-by-step guide in Uzbek with ready scripts: `docs/VPS_DEPLOY.md` (`deploy/server-setup.sh`, `deploy/deploy.sh`).
 
 1. On a Docker host, copy `backend/.env.example` to `backend/.env`. Fill in `SECRET_KEY`, `DB_PASSWORD`, hosts, email and any integrations.
-2. Put the TLS certificate files at `deploy/certs/fullchain.pem` and `deploy/certs/privkey.pem` (Let's Encrypt or your own). If needed, adjust `server_name` in `deploy/nginx.conf`.
+2. Put the TLS certificate files at `deploy/certs/fullchain.pem` and `deploy/certs/privkey.pem` (Let's Encrypt or your own). The domain, a test-site password and noindex come from `.env` (`SERVER_NAMES`, `AUTH_BASIC`, `ROBOTS_TAG`) into `deploy/nginx.conf.template`; `deploy/deploy.sh` writes them for you.
 3. Start the stack:
 
 ```powershell

@@ -1,3 +1,10 @@
+# nginx config TEMPLATE. The nginx container fills in ${SERVER_NAMES}, ${ROBOTS_TAG} and ${AUTH_BASIC} from the
+# environment at start (docker-compose.yml, values in the .env file written by deploy/deploy.sh). Variables with a
+# leading $ that are not in that list ($host, $request_uri, ...) are nginx's own and are left as they are.
+#   SERVER_NAMES  "medmapp.uz www.medmapp.uz" or "test.medmapp.uz"
+#   ROBOTS_TAG    "noindex, nofollow" on a test site (search engines skip it), empty on the real site
+#   AUTH_BASIC    "off", or a realm name such as MedMapp-test to ask for the password in deploy/htpasswd
+
 upstream web { server web:3000; keepalive 32; }
 upstream api { server backend:8000; keepalive 32; }
 
@@ -11,6 +18,9 @@ map $http_accept_encoding $page_encoding {
   default "";
   "~*gzip" gzip;
 }
+map $host $robots_tag {
+  default "${ROBOTS_TAG}";
+}
 map $request_uri $page_cache_skip {
   default 0;
   "~^/((uz|ru|en)/)?(admin|dashboard|partner|login|register)(/|\?|$)" 1;
@@ -18,7 +28,7 @@ map $request_uri $page_cache_skip {
 
 server {
   listen 80;
-  server_name medmapp.uz www.medmapp.uz;
+  server_name ${SERVER_NAMES};
   # Let's Encrypt renewal (deploy/renew-cert.sh) puts its check files here
   location /.well-known/acme-challenge/ { root /var/www/acme; }
   location / { return 301 https://$host$request_uri; }
@@ -27,15 +37,20 @@ server {
 server {
   listen 443 ssl;
   http2 on;
-  server_name medmapp.uz www.medmapp.uz;
+  server_name ${SERVER_NAMES};
 
   ssl_certificate     /etc/nginx/certs/fullchain.pem;
   ssl_certificate_key /etc/nginx/certs/privkey.pem;
   ssl_protocols TLSv1.2 TLSv1.3;
 
+  # Test site: password for every page and request (the site's own server talks to the API directly, not here)
+  auth_basic ${AUTH_BASIC};
+  auth_basic_user_file /etc/nginx/htpasswd;
+
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
   add_header X-Content-Type-Options nosniff always;
   add_header Referrer-Policy strict-origin-when-cross-origin always;
+  add_header X-Robots-Tag $robots_tag always;   # empty on the real site = header not sent
 
   client_max_body_size 30m;   # MAX_UPLOAD_MB=25 + multipart overhead
 
@@ -87,6 +102,7 @@ server {
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Robots-Tag $robots_tag always;
     add_header X-Page-Cache $upstream_cache_status always;
   }
 }
